@@ -352,7 +352,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 9 · לחיצה על מסמך פותחת אותו לצפייה</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 10 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><label class="check"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label></div>
       <div class="row2"><button type="button" class="btn" id="selClear">בטל בחירה</button><button type="button" class="btn" id="selDl">הורד</button><button type="button" class="btn primary" id="selShare">שתף</button></div>
@@ -416,12 +416,16 @@ async function loadDoc(d){
   restoring=false;IDB.set('cur',S.docId);renderHome();processAllDirty();}
 function newDoc(){freezeCur();clearPages();S.docId=Date.now();$('#docName').value=today();docs=docs.filter(d=>d.ids.length);saveDoc();renderHome();}
 async function startup(){
-  DBX.tok=await IDB.get('dbx');await dbxHandleRedirect();
+  DBX.tok=await IDB.get('dbx');
+  if(DBX.tok&&DBX.tok.key!==DBX.key){DBX.tok=null;await IDB.del('dbx');needReconnect=true;}
+  await dbxHandleRedirect();
   docs=(await IDB.get('docs'))||[];uid=(await IDB.get('uid'))||0;
+  if(needReconnect||justConnected){const low=DBX.root.toLowerCase()+'/';docs.forEach(d=>{const l=d.loc||(d.path&&{path:d.path});if(!l||!l.path.toLowerCase().startsWith(low)){d.loc=null;d.path=null;d.sig=null;}});IDB.set('docs',docs);}
   const cur=await IDB.get('cur'),d=docs.find(x=>x.id===cur);
   if(d)await loadDoc(d);else{restoring=false;saveDoc();}
   renderHome();if(DBX.tok){setSync('');scheduleSync(1500);}else autoClean();
-  if(justConnected)openLib();}
+  if(justConnected)openLib();
+  else if(needReconnect){openLib();toast('השמירה עברה לתיקייה ״תמונות״ ב־Dropbox. לחץ ״חבר ל־Dropbox״ פעם אחת.',7000);}}
 const KEEP_DAYS=60,DAY=864e5;
 function cleanOn(){return ls.get('scan-clean')!=='0';}
 function daysLeft(d){return Math.ceil((d.updated+KEEP_DAYS*DAY-Date.now())/DAY);}
@@ -748,7 +752,7 @@ let installEvt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;$('#installBtn').hidden=false;});
 window.addEventListener('appinstalled',()=>{$('#installBtn').hidden=true;installEvt=null;toast('האפליקציה הותקנה. אפשר לפתוח אותה ממסך הבית.');});
 $('#installBtn').onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{await installEvt.userChoice;}catch(_){}installEvt=null;$('#installBtn').hidden=true;};
-const APP_VER='9';
+const APP_VER='10';
 if('serviceWorker' in navigator&&location.protocol==='https:'){
   const hadCtl=!!navigator.serviceWorker.controller;let reloaded=false;
   navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!hadCtl||reloaded)return;reloaded=true;
@@ -758,8 +762,8 @@ if('serviceWorker' in navigator&&location.protocol==='https:'){
     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')chk();});}).catch(()=>{});}
 
 /* ---------- Dropbox ---------- */
-const DBX={key:'b90eflffr96ahlh',redirect:location.origin+location.pathname,tok:null};
-let justConnected=false,dbxFiles=[],dbxListed=false;
+const DBX={key:'oxmpuft7fiizxrs',root:'/תמונות',redirect:location.origin+location.pathname,tok:null};
+let needReconnect=false,justConnected=false,dbxFiles=[],dbxListed=false;
 function b64url(buf){let s='';new Uint8Array(buf).forEach(b=>s+=String.fromCharCode(b));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 async function dbxConnect(){
   try{const v=b64url(crypto.getRandomValues(new Uint8Array(48)));ls.set('dbx-ver',v);
@@ -774,7 +778,7 @@ async function dbxHandleRedirect(){
   if(!code){toast('החיבור ל־Dropbox בוטל');return;}
   try{const r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',body:new URLSearchParams({code,grant_type:'authorization_code',client_id:DBX.key,redirect_uri:DBX.redirect,code_verifier:ls.get('dbx-ver')||''})});
     if(!r.ok)throw 0;const j=await r.json();
-    DBX.tok={access:j.access_token,refresh:j.refresh_token,exp:Date.now()+((j.expires_in||14400)-120)*1000};
+    DBX.tok={key:DBX.key,access:j.access_token,refresh:j.refresh_token,exp:Date.now()+((j.expires_in||14400)-120)*1000};
     await IDB.set('dbx',DBX.tok);ls.del('dbx-ver');justConnected=true;
     toast('מחובר ל־Dropbox. המסמכים יישמרו שם.',4000);}
   catch(_){toast('החיבור ל־Dropbox נכשל. נסה שוב.',4000);}}
@@ -801,7 +805,7 @@ async function dbxCall(ep,body,o){o=o||{};
     return o.raw?r.blob():r.json();}
   throw{code:'auth'};}
 async function dbxList(){
-  let j=await dbxCall('files/list_folder',{path:'',recursive:false});let all=j.entries;
+  let j=await dbxCall('files/list_folder',{path:DBX.root,recursive:false});let all=j.entries;
   while(j.has_more){j=await dbxCall('files/list_folder/continue',{cursor:j.cursor});all=all.concat(j.entries);}
   const fo=all.filter(e=>e['.tag']==='folder').sort((a,b)=>a.name.localeCompare(b.name,'he'));
   const fi=all.filter(e=>e['.tag']==='file').sort((a,b)=>(b.server_modified||'').localeCompare(a.server_modified||''));
@@ -809,7 +813,7 @@ async function dbxList(){
   return dbxFiles;}
 const dbxGet=path=>dbxCall('files/download',null,{content:true,arg:{path},raw:true});
 async function dbxItemFiles(f){
-  const typed=(n,b)=>new Blob([b],{type:/\.pdf$/i.test(n)?'application/pdf':/\.jpe?g$/i.test(n)?'image/jpeg':'application/octet-stream'});
+  const typed=(n,b)=>new Blob([b],{type:/\.pdf$/i.test(n)?'application/pdf':/\.jpe?g$/i.test(n)?'image/jpeg':/\.png$/i.test(n)?'image/png':/\.webp$/i.test(n)?'image/webp':/\.gif$/i.test(n)?'image/gif':'application/octet-stream'});
   if(f['.tag']!=='folder')return[{name:f.name,blob:typed(f.name,await dbxGet(f.path_lower))}];
   let j=await dbxCall('files/list_folder',{path:f.path_lower});let all=j.entries;
   while(j.has_more){j=await dbxCall('files/list_folder/continue',{cursor:j.cursor});all=all.concat(j.entries);}
@@ -844,24 +848,25 @@ async function docFiles(d,cur,fmt){
 async function dbxExists(path){try{await dbxCall('files/get_metadata',{path});return true;}catch(e){if(e&&e.code==='api'&&e.status===409)return false;throw e;}}
 async function uploadDoc(d,cur,sig){
   if(d.path&&!d.loc)d.loc={type:'file',path:d.path};
+  if(d.loc&&!d.loc.path.toLowerCase().startsWith(DBX.root.toLowerCase()+'/'))d.loc=null;
   const fmt=sig.split('|').pop(),out=await docFiles(d,cur,fmt);if(!out)return false;
   const old=d.loc,up=(path,blob,mode)=>dbxCall('files/upload',null,{content:true,blob,arg:{path,mode,autorename:mode==='add',mute:true}});
   if(!out.folder){
-    const f=out.files[0],want='/'+f.name;let res;
+    const f=out.files[0],want=DBX.root+'/'+f.name;let res;
     if(old&&old.type==='file'&&old.path.toLowerCase()===want.toLowerCase())res=await up(old.path,f.blob,'overwrite');
     else res=await up(want,f.blob,'add');
     d.loc={type:'file',path:res.path_display};}
   else{
     let folder;
     if(old&&old.type==='folder'&&old.base===out.name)folder=old.path;
-    else{let i=1;folder='/'+out.name;while(await dbxExists(folder))folder='/'+out.name+' ('+(++i)+')';}
+    else{let i=1;folder=DBX.root+'/'+out.name;while(await dbxExists(folder))folder=DBX.root+'/'+out.name+' ('+(++i)+')';}
     for(const f of out.files)await up(folder+'/'+f.name,f.blob,'overwrite');
     if(old&&old.type==='folder'&&old.path===folder){
       const keep=new Set(out.files.map(f=>f.name.toLowerCase()));
       try{const j=await dbxCall('files/list_folder',{path:folder});
         for(const e of j.entries)if(!keep.has(e.name.toLowerCase())){try{await dbxCall('files/delete_v2',{path:e.path_lower});}catch(_){}}}catch(_){}}
     d.loc={type:'folder',path:folder,base:out.name};}
-  if(old&&old.path.toLowerCase()!==d.loc.path.toLowerCase()){try{await dbxCall('files/delete_v2',{path:old.path});}catch(_){}}
+  if(old&&old.path.toLowerCase()!==d.loc.path.toLowerCase()&&old.path.toLowerCase().startsWith(DBX.root.toLowerCase()+'/')){try{await dbxCall('files/delete_v2',{path:old.path});}catch(_){}}
   d.path=null;return true;}
 async function syncAll(){
   if(!DBX.tok||syncing)return;
@@ -890,7 +895,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 const libUrls=[];
 function fmtDate(t){const dt=new Date(t);return dt.getDate()+'.'+(dt.getMonth()+1)+'.'+dt.getFullYear()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');}
 function renderDbxBox(){const b=$('#dbxBox');
-  if(!DBX.tok){b.innerHTML='<p>אפשר לשמור את המסמכים ב־Dropbox במקום בטלפון. כל מסמך עולה כ־PDF לתיקייה Apps/Sorek Scanner P4p1r1c0, והעותק בטלפון נמחק.</p><button type="button" class="btn primary" id="dbxConnect">חבר ל־Dropbox</button>';
+  if(!DBX.tok){b.innerHTML='<p>אפשר לשמור את המסמכים ב־Dropbox במקום בטלפון. כל מסמך עולה לתיקייה <b>תמונות</b> ב־Dropbox, והעותק בטלפון נמחק.</p><button type="button" class="btn primary" id="dbxConnect">חבר ל־Dropbox</button>';
     $('#dbxConnect').onclick=dbxConnect;return;}
   const p=pendingCount(),cls=syncSt==='err'||syncSt==='wait'?'err':(syncSt==='up'||p)?'up':'';
   const txt=syncSt==='up'?'מעלה…':syncSt==='wait'?'אין אינטרנט, אעלה כשיחזור':syncSt==='err'?'ההעלאה נכשלה, אנסה שוב בעוד דקה':p?(p===1?'מסמך אחד ממתין להעלאה':p+' מסמכים ממתינים להעלאה'):'הכל שמור ב־Dropbox';
@@ -902,7 +907,7 @@ function localRow(d){
   const ex=!DBX.tok&&cleanOn()&&d.id!==S.docId&&daysLeft(d)<=10?' · <span class="exp">יימחק בעוד '+Math.max(1,daysLeft(d))+' ימים</span>':'';
   return `<li><label class="pick"><input type="checkbox" data-pick="l:${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln" data-name="l:${d.id}"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${fmtDate(d.updated)}${st}${up}${ex}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}
 function dbxRow(f,i){
-  return `<li><label class="pick"><input type="checkbox" data-pick="d:${i}" aria-label="בחר מסמך"></label><button class="open" data-dl="${i}"><span class="lt pdf">${f['.tag']==='folder'?'תיקייה':/\.jpe?g$/i.test(f.name)?'JPG':'PDF'}</span><span style="min-width:0"><span class="ln" data-name="d:${i}"></span><span class="ls">${f['.tag']==='folder'?'תיקייה עם קובץ לכל עמוד':fmtDate(Date.parse(f.server_modified))+' · '+fmt(f.size)}</span></span></button><button class="del" data-ddel="${i}">מחק</button></li>`;}
+  return `<li><label class="pick"><input type="checkbox" data-pick="d:${i}" aria-label="בחר מסמך"></label><button class="open" data-dl="${i}"><span class="lt pdf">${f['.tag']==='folder'?'תיקייה':/\.(jpe?g|png|webp|gif|heic)$/i.test(f.name)?'תמונה':/\.pdf$/i.test(f.name)?'PDF':(f.name.split('.').pop()||'').toUpperCase().slice(0,4)}</span><span style="min-width:0"><span class="ln" data-name="d:${i}"></span><span class="ls">${f['.tag']==='folder'?'תיקייה':fmtDate(Date.parse(f.server_modified))+' · '+fmt(f.size)}</span></span></button><button class="del" data-ddel="${i}">מחק</button></li>`;}
 async function openLib(keep){
   saveDoc();const list=$('#libList');libUrls.forEach(u=>URL.revokeObjectURL(u));libUrls.length=0;
   renderDbxBox();$('#cleanRow').hidden=!!DBX.tok;
@@ -911,7 +916,7 @@ async function openLib(keep){
   let html='';
   if(DBX.tok){
     if(local.length)html+='<li class="sec">בטלפון</li>'+local.map(localRow).join('');
-    html+='<li class="sec">ב־Dropbox</li><li id="dbxLoading"><p class="libempty">'+(dbxListed?'מעדכן…':'טוען מ־Dropbox…')+'</p></li>';}
+    html+='<li class="sec">ב־Dropbox · תמונות</li><li id="dbxLoading"><p class="libempty">'+(dbxListed?'מעדכן…':'טוען מ־Dropbox…')+'</p></li>';}
   else html=local.length?local.map(localRow).join(''):'<li><p class="libempty">עוד אין מסמכים שמורים. כל מסמך שתצלם יופיע כאן.</p></li>';
   list.innerHTML=html;
   list.querySelectorAll('[data-name^="l:"]').forEach(el=>{const d=docs.find(x=>x.id===+el.dataset.name.slice(2));el.textContent=d?d.name:'';});
@@ -925,7 +930,7 @@ async function openLib(keep){
     const cl=cd&&(cd.loc||(cd.path&&{path:cd.path})),curPath=cl&&cd.sig===sigOf(cd)?cl.path.toLowerCase():'';
     const rows=files.map((f,i)=>f.path_lower===curPath?'':dbxRow(f,i)).join('');
     l.outerHTML=rows||'<li><p class="libempty">עוד אין מסמכים ב־Dropbox.</p></li>';
-    list.querySelectorAll('[data-name^="d:"]').forEach(el=>{el.textContent=dbxFiles[+el.dataset.name.slice(2)].name.replace(/\.(pdf|jpe?g)$/i,'');});
+    list.querySelectorAll('[data-name^="d:"]').forEach(el=>{el.textContent=dbxFiles[+el.dataset.name.slice(2)].name;});
     updateSel();}}
 $('#cleanChk').checked=cleanOn();
 $('#cleanChk').addEventListener('change',()=>{ls.set('scan-clean',$('#cleanChk').checked?'1':'0');
@@ -1015,14 +1020,14 @@ function pdfJpegs(buf){
   return out;}
 async function openViewer(f){
   view.item=f;view.files=[];view.urls.forEach(URL.revokeObjectURL);view.urls=[];
-  $('#viewTitle').textContent=f.name.replace(/\.(pdf|jpe?g)$/i,'');
+  $('#viewTitle').textContent=f.name;
   const body=$('#viewBody');body.innerHTML='<div class="vmsg"><span class="spin" style="position:static;display:block;margin:0 auto 12px"></span>טוען מ־Dropbox…</div>';
   $('#viewScreen').hidden=false;
   try{
     const fl=await dbxItemFiles(f);if(view.item!==f)return;view.files=fl;
     const imgs=[];
     for(const x of fl){
-      if(/\.jpe?g$/i.test(x.name))imgs.push(x.blob);
+      if(/\.(jpe?g|png|webp|gif)$/i.test(x.name))imgs.push(x.blob);
       else if(/\.pdf$/i.test(x.name)){const j=pdfJpegs(await x.blob.arrayBuffer());if(!j.length)throw{code:'fmt'};imgs.push(...j);}}
     if(!imgs.length)throw{code:'fmt'};
     body.innerHTML='';
