@@ -211,6 +211,8 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 .selbar{position:sticky;bottom:calc(-18px - env(safe-area-inset-bottom,0px));margin:12px -18px 0;padding:12px 18px;background:var(--sheet);border-top:1px solid var(--line)}
 .selbar .selinfo{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:700}
 .selbar .check{margin:0;font-size:15px;font-weight:600}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.danger.armed{background:var(--danger);color:#fff}
 .libempty{color:var(--muted);margin:0}
 
 .toast{position:fixed;left:50%;bottom:calc(130px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;width:max-content;max-width:90vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
@@ -352,10 +354,11 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 10 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 11 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
-      <div class="selinfo"><span id="selCount">נבחרו 0</span><label class="check"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label></div>
-      <div class="row2"><button type="button" class="btn" id="selClear">בטל בחירה</button><button type="button" class="btn" id="selDl">הורד</button><button type="button" class="btn primary" id="selShare">שתף</button></div>
+      <div class="selinfo"><span id="selCount">נבחרו 0</span><button type="button" class="linkbtn" id="selClear">בטל בחירה</button></div>
+      <label class="check" style="margin-top:6px"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label>
+      <div class="row2"><button type="button" class="btn danger" id="selDel">מחק</button><button type="button" class="btn" id="selDl">הורד</button><button type="button" class="btn primary" id="selShare">שתף</button></div>
     </div>
   </div>
 </div>
@@ -943,7 +946,7 @@ $('#selZip').addEventListener('change',()=>ls.set('scan-selzip',$('#selZip').che
 function updateSel(){
   const picks=[...document.querySelectorAll('#libList [data-pick]')],live=new Set(picks.map(c=>c.dataset.pick));
   [...libSel].forEach(k=>{if(!live.has(k))libSel.delete(k);});
-  const n=libSel.size;selPrepared=null;
+  const n=libSel.size;selPrepared=null;if(selDelArm)resetSelDel();
   $('#selBar').hidden=!n;$('#libMain').hidden=!!n;$('#cleanRow').hidden=!!n||!!DBX.tok;
   $('#selCount').textContent=n===1?'נבחר מסמך אחד':'נבחרו '+n+' מסמכים';
   $('#selZip').closest('label').hidden=n<2;$('#selDl').textContent=DBX.tok?'הורד לטלפון':'הורד';
@@ -956,6 +959,23 @@ $('#libList').addEventListener('change',e=>{const c=e.target.closest('[data-pick
 $('#libAll').onclick=()=>{const ks=[...document.querySelectorAll('#libList [data-pick]')].map(c=>c.dataset.pick);
   if(libSel.size===ks.length)libSel.clear();else ks.forEach(k=>libSel.add(k));updateSel();};
 $('#selClear').onclick=()=>{libSel.clear();updateSel();};
+let selDelArm=0;
+function resetSelDel(){const b=$('#selDel');b.classList.remove('armed');b.textContent='מחק';selDelArm=0;}
+$('#selDel').onclick=async()=>{const n=libSel.size;if(!n)return;const b=$('#selDel');
+  if(Date.now()-selDelArm>4000){selDelArm=Date.now();b.classList.add('armed');b.textContent=n===1?'לחץ שוב למחיקה':'למחוק '+n+'? לחץ שוב';setTimeout(()=>{if(Date.now()-selDelArm>=4000)resetSelDel();},4100);return;}
+  b.disabled=true;b.textContent='מוחק…';let ok=0,bad=0,local=0,cloud=0,curGone=false;
+  const fl=[...libSel].filter(k=>k.startsWith('d:')).map(k=>dbxFiles[+k.slice(2)]).filter(Boolean);
+  for(const k of libSel){if(!k.startsWith('l:'))continue;const id=+k.slice(2),d=docs.find(x=>x.id===id);if(!d)continue;
+    d.ids.forEach(dropPage);docs=docs.filter(x=>x!==d);if(id===S.docId)curGone=true;ok++;local++;
+    const l=d.loc||(d.path&&{path:d.path});if(DBX.tok&&l&&l.path.toLowerCase().startsWith(DBX.root.toLowerCase()+'/')){try{await dbxCall('files/delete_v2',{path:l.path});cloud++;}catch(_){}}}
+  IDB.set('docs',docs);
+  for(const f of fl){try{await dbxCall('files/delete_v2',{path:f.path_lower});ok++;cloud++;
+      docs.forEach(d=>{const l=d.loc||(d.path&&{path:d.path});if(l&&l.path.toLowerCase()===f.path_lower){d.path=null;d.loc=null;d.sig=null;}});}
+    catch(_){bad++;}}
+  if(curGone)newDoc();
+  b.disabled=false;resetSelDel();libSel.clear();
+  toast((ok===1?'נמחק פריט אחד':'נמחקו '+ok+' פריטים')+(cloud?'. מ־Dropbox אפשר לשחזר מ״קבצים שנמחקו״.':'')+(bad?' '+bad+' לא נמחקו, נסה שוב.':''),5000);
+  openLib();};
 async function storedPage(id,preset){
   const m=await IDB.get('p:'+id);if(!m)return null;
   if(m.out&&m.w)return{blob:new Blob([m.out],{type:'image/jpeg'}),w:m.w,h:m.h};
@@ -1010,7 +1030,8 @@ $('#libList').addEventListener('click',async e=>{
   const del=e.target.closest('[data-del]');if(!del)return;const id=+del.dataset.del;
   if(!armed(del,'l'+id))return;
   const d=docs.find(x=>x.id===id);if(!d)return;d.ids.forEach(dropPage);docs=docs.filter(x=>x.id!==id);IDB.set('docs',docs);
-  if(id===S.docId)newDoc();openLib();toast('המסמך נמחק מהטלפון');});
+  const l=d.loc||(d.path&&{path:d.path});if(DBX.tok&&l&&l.path.toLowerCase().startsWith(DBX.root.toLowerCase()+'/')){try{await dbxCall('files/delete_v2',{path:l.path});}catch(_){}}
+  if(id===S.docId)newDoc();openLib();toast(DBX.tok?'המסמך נמחק':'המסמך נמחק מהטלפון');});
 
 /* ---------- viewer ---------- */
 const view={item:null,files:[],urls:[]};
