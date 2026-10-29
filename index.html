@@ -112,7 +112,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 
 /* Live camera */
 .cam{background:#000;padding:0}
-.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
 #camOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .camtop{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 18px;background:linear-gradient(rgba(0,0,0,.6),transparent)}
 .camtop .sp{flex:1}
@@ -199,7 +199,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
   <div class="empty" id="empty">
     <div class="sheetart" aria-hidden="true"><i></i><i></i><i></i><i></i><b style="top:34px"></b><b style="top:50px;left:40px"></b><b style="top:66px"></b><b style="top:82px;left:28px"></b></div>
     <h2>צלם את העמוד הראשון</h2>
-    <p>המצלמה מזהה את קצוות הדף בזמן אמת. במצב <b>רצף</b> מצלמים עמוד אחרי עמוד, ובמצב <b>אוטומטי</b> הצילום קורה לבד כשהדף יציב.</p>
+    <p>במצב <b>רצף</b> מצלמים עמוד אחרי עמוד, ובסיום בוחרים שם לקובץ. כל עמוד נחתך לפי קצוות הדף, ואפשר לכבות את זה במצלמה.</p>
     <p>כל המסמכים נשמרים בטלפון, גם בלי אינטרנט.</p>
   </div>
   <ol class="grid" id="grid"></ol>
@@ -225,16 +225,14 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 
 <section class="screen cam" id="camScreen" hidden>
   <video id="camVideo" playsinline muted autoplay></video>
-  <canvas id="camOverlay"></canvas>
   <div class="flash" id="camFlash"></div>
   <div class="camerr" id="camErr" hidden><div><p id="camErrText"></p><button class="btn" id="camNative">צלם עם מצלמת הטלפון</button></div></div>
   <div class="camtop">
     <button class="pill" id="camClose">סגור</button>
     <span class="sp"></span>
     <button class="pill" id="camTorch" hidden aria-pressed="false">פנס</button>
-    <button class="pill" id="camAuto" aria-pressed="false">אוטומטי</button>
+    <button class="pill" id="camCrop" aria-pressed="true">חיתוך אוטומטי</button>
   </div>
-  <div class="camhint" id="camHint">כוון את המצלמה לדף</div>
   <div class="cambottom">
     <div class="cammodes" role="group" aria-label="מצב צילום">
       <button data-mode="single">יחיד</button>
@@ -506,9 +504,9 @@ async function processAllDirty(){for(const pg of S.pages)if(pg.dirty)await proce
 
 /* ---------- live camera ---------- */
 const cam={stream:null,track:null,raf:0,last:0,quad:null,shown:null,stable:0,miss:0,armed:true,cool:0,busy:false,torch:false,wake:null,small:mk(2,2),
-  auto:ls.get('scan-auto')==='1'};
+  auto:false,crop:ls.get('scan-crop')!=='0'};
 S.mode=ls.get('scan-mode')==='single'?'single':'batch';
-function camHint(t){$('#camHint').textContent=t;}
+function camHint(t){const h=$('#camHint');if(h)h.textContent=t;}
 async function openCam(){
   document.body.classList.add('cam-open');
   $('#camScreen').hidden=false;$('#camErr').hidden=true;renderCamUI();camHint('פותח מצלמה…');
@@ -532,11 +530,7 @@ function closeCam(){stopStream();$('#camScreen').hidden=true;document.body.class
 document.addEventListener('visibilitychange',()=>{
   if($('#camScreen').hidden)return;
   if(document.visibilityState==='hidden')stopStream();else if(!cam.stream)openCam();});
-function loop(t){
-  cam.raf=requestAnimationFrame(loop);
-  const v=$('#camVideo');if(!v.videoWidth)return;
-  if(t-cam.last>120&&!cam.busy){cam.last=t;detectFrame(v);}
-  drawOverlay(v);}
+function loop(){}
 function detectFrame(v){
   const vw=v.videoWidth,vh=v.videoHeight,s=320/Math.max(vw,vh),c=cam.small;
   c.width=Math.round(vw*s);c.height=Math.round(vh*s);c.getContext('2d').drawImage(v,0,0,c.width,c.height);
@@ -577,7 +571,7 @@ async function shoot(){
     cv.getContext('2d').drawImage(v,0,0,cv.width,cv.height);
     if(Math.max(vw,vh)<1900&&'ImageCapture' in window&&cam.track){
       try{const b=await Promise.race([new ImageCapture(cam.track).takePhoto(),new Promise((_,r)=>setTimeout(r,3500))]);cv=await loadToCanvas(b,3000);}catch(_){}}
-    const corners=detectCorners(cv)||(cam.quad&&cv.width===Math.round(vw*s)?cam.quad.map(p=>({x:p.x*s,y:p.y*s})):null);
+    const corners=cam.crop?(detectCorners(cv)||fullCorners(cv,0.04)):fullCorners(cv,0);
     if(S.retake){const pg=S.retake;S.retake=null;await replaceSrc(pg,cv,corners);cam.busy=false;closeCam();openCrop(pg);return;}
     const pg=await pageFromCanvas(cv,corners);
     if(S.mode==='batch'){processPage(pg);cam.busy=false;renderCamUI();updateHint();}
@@ -585,7 +579,8 @@ async function shoot(){
   }catch(e){cam.busy=false;toast('הצילום נכשל. נסה שוב.');}}
 function renderCamUI(){
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===S.mode));
-  $('#camAuto').setAttribute('aria-pressed',cam.auto);
+  $('#camCrop').setAttribute('aria-pressed',cam.crop);
+  $('#camCrop').textContent=cam.crop?'חיתוך אוטומטי':'בלי חיתוך';
   $('#camTorch').setAttribute('aria-pressed',cam.torch);
   const N=S.pages.length,last=S.pages[N-1],st=$('#camStack');
   st.style.visibility=N&&!S.retake?'visible':'hidden';
@@ -595,10 +590,10 @@ function renderCamUI(){
 $('#camShot').onclick=()=>shoot();
 $('#camClose').onclick=()=>{S.retake=null;closeCam();};
 $('#camDone').onclick=()=>{const r=S.retake;S.retake=null;closeCam();if(r){openEdit(r);return;}
-  if(S.pages.length)toast('הקש על עמוד כדי לתקן חיתוך או מסנן',3000);};
+  if(S.pages.length)openSaveAs(fname(),{formats:true});};
 $('#camStack').onclick=()=>$('#camDone').click();
-$('#camAuto').onclick=()=>{cam.auto=!cam.auto;ls.set('scan-auto',cam.auto?'1':'0');cam.armed=true;cam.stable=0;renderCamUI();updateHint();
-  toast(cam.auto?'צילום אוטומטי: מצלם לבד כשהדף מזוהה ויציב':'צילום ידני: לחץ על הכפתור לצילום');};
+$('#camCrop').onclick=()=>{cam.crop=!cam.crop;ls.set('scan-crop',cam.crop?'1':'0');renderCamUI();
+  toast(cam.crop?'כל תמונה תיחתך לפי קצוות הדף':'התמונה תישמר כמו שצולמה, בלי חיתוך');};
 $('#camTorch').onclick=async()=>{if(!cam.track)return;cam.torch=!cam.torch;
   try{await cam.track.applyConstraints({advanced:[{torch:cam.torch}]});}catch(_){cam.torch=false;toast('הפנס לא זמין במצלמה הזו');}renderCamUI();};
 document.querySelector('.cammodes').addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(!b)return;
@@ -745,7 +740,7 @@ function openSaveAs(name,job){
   const q=$('#quickNames');q.textContent='';const r=recent().filter(x=>x!==name);
   r.forEach(n=>{const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>{$('#saveName').value=n;updateFmt();};q.appendChild(b);});
   $('#quickWrap').hidden=!r.length;
-  $('#saveBg').hidden=false;updateFmt();
+  $('#saveBg').hidden=false;updateFmt();setTimeout(()=>{const i=$('#saveName');i.focus();i.select();},80);
   if(job.formats)processAllDirty();}
 function closeSave(){$('#saveBg').hidden=true;saveJob=null;prepared=null;}
 $('#saveCancel').onclick=closeSave;
