@@ -177,6 +177,15 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 .lib .ls{display:block;color:var(--muted);font-size:14px}
 .lib .cur{color:var(--ink);font-weight:700}
 .lib .del{background:none;border:0;color:var(--danger);font-weight:700;padding:8px}
+.lib .pick{flex:0 0 auto;display:grid;place-items:center;width:40px;height:44px;margin:0;cursor:pointer}
+.lib .pick input{width:22px;height:22px;accent-color:var(--ink);margin:0}
+.lib li.sel{background:color-mix(in srgb,var(--ink) 9%,transparent)}
+.libhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.libhead h2{margin:0}
+.linkbtn{background:none;border:0;color:var(--ink);font-weight:700;font-size:15px;padding:6px 4px}
+.selbar{position:sticky;bottom:calc(-18px - env(safe-area-inset-bottom,0px));margin:12px -18px 0;padding:12px 18px;background:var(--sheet);border-top:1px solid var(--line)}
+.selbar .selinfo{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:700}
+.selbar .check{margin:0;font-size:15px;font-weight:600}
 .libempty{color:var(--muted);margin:0}
 
 .toast{position:fixed;left:50%;bottom:calc(130px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;width:max-content;max-width:90vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
@@ -306,9 +315,13 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 
 <div class="sheet-bg" id="libBg" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle">
-    <h2 id="libTitle">המסמכים שלי</h2>
+    <div class="libhead"><h2 id="libTitle">המסמכים שלי</h2><button type="button" class="linkbtn" id="libAll" hidden>בחר הכל</button></div>
     <ul class="lib" id="libList"></ul>
-    <div class="row2"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
+    <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
+    <div class="selbar" id="selBar" hidden>
+      <div class="selinfo"><span id="selCount">נבחרו 0</span><label class="check"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label></div>
+      <div class="row2"><button type="button" class="btn" id="selClear">בטל בחירה</button><button type="button" class="btn" id="selDl">הורד</button><button type="button" class="btn primary" id="selShare">שתף</button></div>
+    </div>
   </div>
 </div>
 
@@ -694,12 +707,63 @@ async function openLib(){
   const show=docs.filter(d=>d.ids.length||d.id===S.docId);
   if(!show.some(d=>d.ids.length)){list.innerHTML='<li><p class="libempty">עוד אין מסמכים שמורים. כל מסמך שתצלם יופיע כאן.</p></li>';}
   else list.innerHTML=show.filter(d=>d.ids.length).map(d=>{const dt=new Date(d.updated);
-    return `<li><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}${d.id===S.docId?' · <span class="cur">פתוח עכשיו</span>':''}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}).join('');
+    return `<li data-row="${d.id}"><label class="pick"><input type="checkbox" data-pick="${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}${d.id===S.docId?' · <span class="cur">פתוח עכשיו</span>':''}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}).join('');
   list.querySelectorAll('[data-doc]').forEach(b=>{const d=docs.find(x=>x.id===+b.dataset.doc);b.querySelector('.ln').textContent=d.name;});
+  libSel.clear();updateSel();$('#libAll').hidden=!list.querySelector('[data-pick]');
   $('#libBg').hidden=false;
   for(const el of list.querySelectorAll('[data-cover]')){const id=+el.dataset.cover;if(!id)continue;
     const m=await IDB.get('p:'+id);if(m&&m.out){const u=URL.createObjectURL(new Blob([m.out],{type:'image/jpeg'}));libUrls.push(u);el.innerHTML='<img alt="" src="'+u+'">';}}}
-function closeLib(){$('#libBg').hidden=true;}
+function closeLib(){$('#libBg').hidden=true;libSel.clear();selPrepared=null;}
+const libSel=new Set();let selPrepared=null;
+$('#selZip').checked=ls.get('scan-selzip')!=='0';
+$('#selZip').addEventListener('change',()=>ls.set('scan-selzip',$('#selZip').checked?'1':'0'));
+function updateSel(){const n=libSel.size;selPrepared=null;
+  $('#selBar').hidden=!n;$('#libMain').hidden=!!n;
+  $('#selCount').textContent=n===1?'נבחר מסמך אחד':'נבחרו '+n+' מסמכים';
+  $('#selZip').closest('label').hidden=n<2;
+  if(!canShareFiles)$('#selShare').hidden=true;
+  document.querySelectorAll('#libList [data-pick]').forEach(c=>{c.checked=libSel.has(+c.dataset.pick);c.closest('li').classList.toggle('sel',c.checked);});
+  const all=document.querySelectorAll('#libList [data-pick]').length;
+  $('#libAll').textContent=n&&n===all?'נקה הכל':'בחר הכל';}
+$('#libList').addEventListener('change',e=>{const c=e.target.closest('[data-pick]');if(!c)return;
+  const id=+c.dataset.pick;if(c.checked)libSel.add(id);else libSel.delete(id);updateSel();});
+$('#libAll').onclick=()=>{const ids=[...document.querySelectorAll('#libList [data-pick]')].map(c=>+c.dataset.pick);
+  if(libSel.size===ids.length)libSel.clear();else ids.forEach(i=>libSel.add(i));updateSel();};
+$('#selClear').onclick=()=>{libSel.clear();updateSel();};
+async function storedPage(id,preset){
+  const m=await IDB.get('p:'+id);if(!m)return null;
+  if(m.out&&m.w)return{blob:new Blob([m.out],{type:'image/jpeg'}),w:m.w,h:m.h};
+  const s=await IDB.get('s:'+id);if(!s)return null;
+  const P=PRESETS[preset]||PRESETS.std,src=await loadToCanvas(new Blob([s],{type:'image/jpeg'}),99999);
+  let cv=warp(src,m.corners||fullCorners(src,0),P.long);cv=rotate(cv,m.rot||0);cv=applyFilter(cv,m.filter||'magic');
+  return{blob:await toBlob(cv,m.filter==='bw'?P.q-0.1:P.q),w:cv.width,h:cv.height};}
+async function docPdf(d){
+  if(d.id===S.docId){await processAllDirty();return buildPdf(S.pages.slice());}
+  const pages=[];for(const id of d.ids){const p=await storedPage(id,d.preset);if(p)pages.push(p);}
+  return pages.length?buildPdf(pages):null;}
+async function prepareSel(){
+  const key=[...libSel].sort().join(',');if(selPrepared&&selPrepared.key===key)return selPrepared.files;
+  const used=new Set(),files=[];
+  for(const d of docs.filter(x=>libSel.has(x.id))){
+    const blob=await docPdf(d);if(!blob)continue;
+    let base=(d.name||'מסמך').replace(/[\\/:*?"<>|]+/g,'-').trim()||'מסמך',n=base,i=2;
+    while(used.has(n))n=base+' ('+(i++)+')';used.add(n);files.push({name:n+'.pdf',blob});}
+  selPrepared={key,files};return files;}
+function zipName(){const d=new Date();return 'מסמכים '+d.getDate()+'-'+(d.getMonth()+1)+'-'+d.getFullYear()+'.zip';}
+$('#selDl').onclick=async()=>{if(!libSel.size)return;const b=$('#selDl');b.disabled=true;b.textContent='מכין…';
+  try{const files=await prepareSel();if(!files.length)throw 0;
+    if(files.length>1&&$('#selZip').checked)download(zipName(),await buildZip(files));
+    else for(let i=0;i<files.length;i++){download(files[i].name,files[i].blob);if(i<files.length-1)await new Promise(r=>setTimeout(r,450));}
+    toast(files.length>1?'הורדו '+files.length+' מסמכים':'הורד: '+files[0].name);}
+  catch(_){toast('ההורדה נכשלה. נסה שוב.');}
+  b.disabled=false;b.textContent='הורד';};
+$('#selShare').onclick=async()=>{if(!libSel.size)return;const b=$('#selShare');b.disabled=true;b.textContent='מכין…';
+  try{const files=await prepareSel();if(!files.length)throw 0;
+    const fl=files.map(f=>new File([f.blob],f.name,{type:'application/pdf'}));
+    try{await navigator.share({files:fl,title:files.length>1?files.length+' מסמכים':files[0].name});}
+    catch(err){if(err&&err.name==='NotAllowedError')toast('הקבצים מוכנים. לחץ שוב על שתף.');else if(!(err&&err.name==='AbortError'))toast('השיתוף לא הצליח. נסה ״הורד״.');}}
+  catch(_){toast('ההכנה נכשלה. נסה שוב.');}
+  b.disabled=false;b.textContent='שתף';};
 $('#libBtn').onclick=openLib;$('#libClose').onclick=closeLib;
 $('#libBg').addEventListener('click',e=>{if(e.target.id==='libBg')closeLib();});
 $('#libNew').onclick=()=>{closeLib();newDoc();};
