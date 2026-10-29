@@ -189,6 +189,15 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 .lib li.sec{border:0;padding:14px 0 2px;font-size:13px;font-weight:800;color:var(--muted)}
 .lib .lt.pdf{display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--danger)}
 .lib .wait{color:#B7791F;font-weight:700}
+.viewer{flex:1;min-height:0;overflow:auto;padding:12px 14px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
+.viewer figure{margin:0;width:100%;max-width:900px}
+.viewer img{display:block;width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px #2A323B}
+.viewer figcaption{margin-top:4px;text-align:center;font-size:13px;color:#9AA6B2}
+.viewer .vmsg{margin:auto;text-align:center;color:#C9D1D9;max-width:30ch}
+.viewer .vmsg .btn{margin-top:12px;background:var(--mark);color:#1A1A1A;border-color:var(--mark)}
+#viewScreen{z-index:35}
+#viewScreen .tools .row .btn{flex:1}
+.sheet .alt{display:block;margin:10px auto 0;background:none;border:0;color:var(--ink);font-weight:700;font-size:15px;text-decoration:underline;text-underline-offset:3px;padding:6px}
 .sync{font-size:13px;font-weight:700;color:var(--muted);padding:3px 9px;border-radius:999px;background:var(--sheet);border:1px solid var(--line);white-space:nowrap}
 .sync.err{color:var(--danger)}
 .cleanrow .check{margin:0 0 2px}
@@ -325,9 +334,16 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
     </div>
     <div class="quickwrap" id="quickWrap" hidden><span class="lbl">שמות אחרונים</span><div class="quick" id="quickNames"></div></div>
     <p class="hint" id="saveHint">שתף: וואטסאפ, מייל, Drive או Dropbox. הורד: נשמר בתיקיית ההורדות של הטלפון.</p>
-    <div class="row2"><button type="button" class="btn" id="saveCancel">ביטול</button><button type="button" class="btn" id="saveDl">הורד</button><button type="submit" class="btn primary" id="saveShare">שתף</button></div>
+    <div class="row2"><button type="button" class="btn" id="saveCancel">ביטול</button><button type="button" class="btn" id="saveDl">הורד</button><button type="submit" class="btn primary" id="saveShare">שתף</button><button type="button" class="btn primary" id="saveDbx" hidden>שמור ב־Dropbox</button></div>
+    <button type="button" class="alt" id="saveDlAlt" hidden>להוריד עותק גם לטלפון</button>
   </form>
 </div>
+
+<section class="screen" id="viewScreen" hidden>
+  <div class="bar"><button class="ghost" id="viewClose">סגור</button><h2 id="viewTitle"></h2><span style="width:56px"></span></div>
+  <div class="viewer" id="viewBody"></div>
+  <div class="tools"><div class="row"><button class="btn" id="viewDl">הורד לטלפון</button><button class="btn primary" id="viewShare">שתף</button></div></div>
+</section>
 
 <div class="sheet-bg" id="libBg" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle">
@@ -785,10 +801,11 @@ async function dbxList(){
   return dbxFiles;}
 const dbxGet=path=>dbxCall('files/download',null,{content:true,arg:{path},raw:true});
 async function dbxItemFiles(f){
-  if(f['.tag']!=='folder')return[{name:f.name,blob:await dbxGet(f.path_lower)}];
+  const typed=(n,b)=>new Blob([b],{type:/\.pdf$/i.test(n)?'application/pdf':/\.jpe?g$/i.test(n)?'image/jpeg':'application/octet-stream'});
+  if(f['.tag']!=='folder')return[{name:f.name,blob:typed(f.name,await dbxGet(f.path_lower))}];
   let j=await dbxCall('files/list_folder',{path:f.path_lower});let all=j.entries;
   while(j.has_more){j=await dbxCall('files/list_folder/continue',{cursor:j.cursor});all=all.concat(j.entries);}
-  const out=[];for(const e of all.filter(e=>e['.tag']==='file').sort((a,b)=>a.name.localeCompare(b.name,'he',{numeric:true})))out.push({name:e.name,blob:await dbxGet(e.path_lower)});
+  const out=[];for(const e of all.filter(e=>e['.tag']==='file').sort((a,b)=>a.name.localeCompare(b.name,'he',{numeric:true})))out.push({name:e.name,blob:typed(e.name,await dbxGet(e.path_lower))});
   return out;}
 
 /* sync: every document goes up as one PDF; once it is not the open document, the phone copy is removed */
@@ -916,7 +933,7 @@ function updateSel(){
   const n=libSel.size;selPrepared=null;
   $('#selBar').hidden=!n;$('#libMain').hidden=!!n;$('#cleanRow').hidden=!!n||!!DBX.tok;
   $('#selCount').textContent=n===1?'נבחר מסמך אחד':'נבחרו '+n+' מסמכים';
-  $('#selZip').closest('label').hidden=n<2;
+  $('#selZip').closest('label').hidden=n<2;$('#selDl').textContent=DBX.tok?'הורד לטלפון':'הורד';
   if(!canShareFiles)$('#selShare').hidden=true;
   picks.forEach(c=>{c.checked=libSel.has(c.dataset.pick);c.closest('li').classList.toggle('sel',c.checked);});
   $('#libAll').hidden=!picks.length;
@@ -953,7 +970,7 @@ $('#selDl').onclick=async()=>{if(!libSel.size)return;const b=$('#selDl');b.disab
     else for(let i=0;i<files.length;i++){download(files[i].name,files[i].blob);if(i<files.length-1)await new Promise(r=>setTimeout(r,450));}
     toast(files.length>1?'הורדו '+files.length+' מסמכים':'הורד: '+files[0].name);}
   catch(e){toast(e&&e.code==='net'?'אין חיבור לאינטרנט. נסה שוב.':'ההורדה נכשלה. נסה שוב.');}
-  b.disabled=false;b.textContent='הורד';};
+  b.disabled=false;b.textContent=DBX.tok?'הורד לטלפון':'הורד';};
 $('#selShare').onclick=async()=>{if(!libSel.size)return;const b=$('#selShare');b.disabled=true;b.textContent='מכין…';
   try{const files=await prepareSel();if(!files.length)throw 0;
     const fl=files.map(f=>new File([f.blob],f.name,{type:'application/pdf'}));
@@ -970,10 +987,7 @@ $('#libList').addEventListener('click',async e=>{
   const o=e.target.closest('[data-doc]');
   if(o){const d=docs.find(x=>x.id===+o.dataset.doc);closeLib();if(d&&d.id!==S.docId){await loadDoc(d);toast('נפתח: '+d.name);}return;}
   const g=e.target.closest('[data-dl]');
-  if(g){const f=dbxFiles[+g.dataset.dl];if(!f)return;toast('מוריד מ־Dropbox…',8000);
-    try{const fl=await dbxItemFiles(f);if(!fl.length)throw 0;
-      if(fl.length===1)download(fl[0].name,fl[0].blob);else download(f.name+'.zip',await buildZip(fl));
-      toast('הורד: '+(fl.length===1?fl[0].name:f.name+'.zip'));}catch(err){toast(err&&err.code==='net'?'אין חיבור לאינטרנט.':'ההורדה נכשלה.');}return;}
+  if(g){const f=dbxFiles[+g.dataset.dl];if(f)openViewer(f);return;}
   const dd=e.target.closest('[data-ddel]');
   if(dd){const f=dbxFiles[+dd.dataset.ddel];if(!f||!armed(dd,'d'+f.path_lower))return;
     try{await dbxCall('files/delete_v2',{path:f.path_lower});
@@ -984,6 +998,42 @@ $('#libList').addEventListener('click',async e=>{
   if(!armed(del,'l'+id))return;
   const d=docs.find(x=>x.id===id);if(!d)return;d.ids.forEach(dropPage);docs=docs.filter(x=>x.id!==id);IDB.set('docs',docs);
   if(id===S.docId)newDoc();openLib();toast('המסמך נמחק מהטלפון');});
+
+/* ---------- viewer ---------- */
+const view={item:null,files:[],urls:[]};
+function pdfJpegs(buf){
+  const u=new Uint8Array(buf),t=new TextDecoder('latin1').decode(u),re=/\/DCTDecode[^>]*?\/Length\s+(\d+)[^>]*>>\s*stream\r?\n/g,out=[];let m;
+  while((m=re.exec(t))){const st=m.index+m[0].length,len=+m[1];out.push(new Blob([u.slice(st,st+len)],{type:'image/jpeg'}));re.lastIndex=st+len;}
+  return out;}
+async function openViewer(f){
+  view.item=f;view.files=[];view.urls.forEach(URL.revokeObjectURL);view.urls=[];
+  $('#viewTitle').textContent=f.name.replace(/\.(pdf|jpe?g)$/i,'');
+  const body=$('#viewBody');body.innerHTML='<div class="vmsg"><span class="spin" style="position:static;display:block;margin:0 auto 12px"></span>טוען מ־Dropbox…</div>';
+  $('#viewScreen').hidden=false;
+  try{
+    const fl=await dbxItemFiles(f);if(view.item!==f)return;view.files=fl;
+    const imgs=[];
+    for(const x of fl){
+      if(/\.jpe?g$/i.test(x.name))imgs.push(x.blob);
+      else if(/\.pdf$/i.test(x.name)){const j=pdfJpegs(await x.blob.arrayBuffer());if(!j.length)throw{code:'fmt'};imgs.push(...j);}}
+    if(!imgs.length)throw{code:'fmt'};
+    body.innerHTML='';
+    imgs.forEach((b,i)=>{const u=URL.createObjectURL(b);view.urls.push(u);
+      const fig=document.createElement('figure'),im=document.createElement('img');im.src=u;im.alt='עמוד '+(i+1);im.loading='lazy';fig.appendChild(im);
+      if(imgs.length>1){const c=document.createElement('figcaption');c.textContent='עמוד '+(i+1)+' מתוך '+imgs.length;fig.appendChild(c);}
+      body.appendChild(fig);});
+    body.scrollTop=0;}
+  catch(e){if(view.item!==f)return;
+    body.innerHTML='<div class="vmsg">'+(e&&e.code==='net'?'אין חיבור לאינטרנט. התצוגה תעבוד כשהחיבור יחזור.':e&&e.code==='fmt'?'אי אפשר להציג את הקובץ הזה כאן. אפשר להוריד אותו ולפתוח באפליקציה אחרת.':'לא הצלחתי לטעון את המסמך מ־Dropbox.')+'</div>';}}
+function closeViewer(){$('#viewScreen').hidden=true;view.item=null;view.urls.forEach(URL.revokeObjectURL);view.urls=[];$('#viewBody').innerHTML='';}
+$('#viewClose').onclick=closeViewer;
+$('#viewDl').onclick=async()=>{const f=view.item,fl=view.files;if(!f||!fl.length)return;
+  if(fl.length===1)download(fl[0].name,fl[0].blob);else download(f.name+'.zip',await buildZip(fl));
+  toast('הורד לטלפון: '+(fl.length===1?fl[0].name:f.name+'.zip'));};
+$('#viewShare').onclick=async()=>{const fl=view.files;if(!fl.length)return;
+  if(!canShareFiles){$('#viewDl').click();return;}
+  try{await navigator.share({files:fl.map(x=>new File([x.blob],x.name,{type:x.blob.type||(/\.pdf$/i.test(x.name)?'application/pdf':'image/jpeg')})),title:$('#viewTitle').textContent});}
+  catch(err){if(err&&err.name!=='AbortError')toast('השיתוף לא הצליח. נסה ״הורד לטלפון״.');}};
 
 /* ---------- save / share ---------- */
 let saveJob=null,saveFmt=ls.get('scan-fmt')||'pdf',prepared=null;
@@ -1014,13 +1064,21 @@ function recent(){try{return JSON.parse(ls.get('scan-recent-names')||'[]');}catc
 function remember(n){ls.set('scan-recent-names',JSON.stringify([n,...recent().filter(x=>x!==n)].slice(0,6)));}
 function openSaveAs(name,job){
   saveJob=job;prepared=null;$('#saveName').value=name;
-  $('#saveTitle').textContent=job.formats?'שמירה ושיתוף':'שיתוף העמוד כ־JPG';
+  $('#saveTitle').textContent=job.formats?(DBX.tok?'שמירה':'שמירה ושיתוף'):'שיתוף העמוד כ־JPG';
+  const dbxMode=!!(DBX.tok&&job.formats);
+  $('#saveDbx').hidden=!dbxMode;$('#saveDl').hidden=dbxMode;$('#saveDlAlt').hidden=!dbxMode;
+  $('#saveShare').hidden=!canShareFiles;$('#saveShare').classList.toggle('primary',!dbxMode);
+  $('#saveDl').classList.toggle('primary',!canShareFiles);
+  $('#saveHint').textContent=dbxMode?'נשמר אוטומטית ב־Dropbox, אין צורך להוריד לטלפון. ״שתף״ שולח את הקובץ לוואטסאפ, מייל וכו׳.':canShareFiles?'שתף: וואטסאפ, מייל, Drive או Dropbox. הורד: נשמר בתיקיית ההורדות של הטלפון.':'הקובץ יישמר בתיקיית ההורדות של הטלפון.';
   $('#fmtWrap').hidden=!job.formats;
   const q=$('#quickNames');q.textContent='';const r=recent().filter(x=>x!==name);
   r.forEach(n=>{const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>{$('#saveName').value=n;updateFmt();};q.appendChild(b);});
   $('#quickWrap').hidden=!r.length;
   $('#saveBg').hidden=false;updateFmt();setTimeout(()=>{const i=$('#saveName');i.focus();i.select();},80);
   if(job.formats)processAllDirty();}
+$('#saveDbx').onclick=()=>{if(!saveJob)return;const n=cleanName();if(!n){$('#saveName').focus();return;}
+  finishName(n);closeSave();scheduleSync(300);toast('נשמר ב־Dropbox: '+n,3000);};
+$('#saveDlAlt').onclick=()=>$('#saveDl').click();
 function closeSave(){$('#saveBg').hidden=true;saveJob=null;prepared=null;}
 $('#saveCancel').onclick=closeSave;
 $('#saveBg').addEventListener('click',e=>{if(e.target.id==='saveBg')closeSave();});
@@ -1039,6 +1097,7 @@ function download(name,blob){const a=document.createElement('a');a.href=URL.crea
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},8000);}
 function finishName(n){remember(n);if(saveJob&&saveJob.formats){$('#docName').value=n;saveDoc();}}
 $('#saveForm').onsubmit=async e=>{e.preventDefault();if(!saveJob)return;
+  if(!$('#saveDbx').hidden){$('#saveDbx').click();return;}
   if(!canShareFiles){$('#saveDl').click();return;}
   const n=cleanName();if(!n){$('#saveName').focus();return;}
   const go=$('#saveShare');go.disabled=true;go.textContent='מכין…';
@@ -1133,7 +1192,7 @@ $('#editDelete').onclick=()=>{const b=$('#editDelete');
 history.replaceState({app:1},'');history.pushState({app:2},'');
 window.addEventListener('popstate',()=>{
   history.pushState({app:2},'');
-  if(!$('#saveBg').hidden)closeSave();else if(!$('#libBg').hidden)closeLib();
+  if(!$('#saveBg').hidden)closeSave();else if(!$('#viewScreen').hidden)closeViewer();else if(!$('#libBg').hidden)closeLib();
   else if(!$('#camScreen').hidden)$('#camClose').click();
   else if(!$('#cropScreen').hidden)$('#cropCancel').click();
   else if(!$('#editScreen').hidden)$('#editDone').click();});
