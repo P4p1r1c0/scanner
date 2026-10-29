@@ -352,6 +352,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 9 · לחיצה על מסמך פותחת אותו לצפייה</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><label class="check"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label></div>
       <div class="row2"><button type="button" class="btn" id="selClear">בטל בחירה</button><button type="button" class="btn" id="selDl">הורד</button><button type="button" class="btn primary" id="selShare">שתף</button></div>
@@ -747,7 +748,14 @@ let installEvt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;$('#installBtn').hidden=false;});
 window.addEventListener('appinstalled',()=>{$('#installBtn').hidden=true;installEvt=null;toast('האפליקציה הותקנה. אפשר לפתוח אותה ממסך הבית.');});
 $('#installBtn').onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{await installEvt.userChoice;}catch(_){}installEvt=null;$('#installBtn').hidden=true;};
-if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+const APP_VER='9';
+if('serviceWorker' in navigator&&location.protocol==='https:'){
+  const hadCtl=!!navigator.serviceWorker.controller;let reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!hadCtl||reloaded)return;reloaded=true;
+    if($('#camScreen').hidden&&$('#cropScreen').hidden&&$('#editScreen').hidden&&$('#saveBg').hidden)location.reload();});
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
+    const chk=()=>reg.update().catch(()=>{});chk();
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')chk();});}).catch(()=>{});}
 
 /* ---------- Dropbox ---------- */
 const DBX={key:'b90eflffr96ahlh',redirect:location.origin+location.pathname,tok:null};
