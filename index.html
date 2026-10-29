@@ -176,6 +176,9 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 .lib .ln{display:block;font-weight:800;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lib .ls{display:block;color:var(--muted);font-size:14px}
 .lib .cur{color:var(--ink);font-weight:700}
+.lib .exp{color:var(--danger);font-weight:700}
+.cleanrow{margin:14px 0 0;font-size:15px;color:var(--muted)}
+.cleanrow .check{margin:0 0 2px}
 .lib .del{background:none;border:0;color:var(--danger);font-weight:700;padding:8px}
 .lib .pick{flex:0 0 auto;display:grid;place-items:center;width:40px;height:44px;margin:0;cursor:pointer}
 .lib .pick input{width:22px;height:22px;accent-color:var(--ink);margin:0}
@@ -317,6 +320,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle">
     <div class="libhead"><h2 id="libTitle">המסמכים שלי</h2><button type="button" class="linkbtn" id="libAll" hidden>בחר הכל</button></div>
     <ul class="lib" id="libList"></ul>
+    <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><label class="check"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label></div>
@@ -381,7 +385,17 @@ async function startup(){
   docs=(await IDB.get('docs'))||[];uid=(await IDB.get('uid'))||0;
   const cur=await IDB.get('cur'),d=docs.find(x=>x.id===cur);
   if(d)await loadDoc(d);else{restoring=false;saveDoc();}
-  renderHome();}
+  renderHome();autoClean();}
+const KEEP_DAYS=60,DAY=864e5;
+function cleanOn(){return ls.get('scan-clean')!=='0';}
+function daysLeft(d){return Math.ceil((d.updated+KEEP_DAYS*DAY-Date.now())/DAY);}
+function autoClean(){
+  if(!cleanOn())return;
+  const old=docs.filter(d=>d.id!==S.docId&&d.ids.length&&daysLeft(d)<=0);
+  if(!old.length)return;
+  old.forEach(d=>d.ids.forEach(dropPage));
+  docs=docs.filter(d=>!old.includes(d));IDB.set('docs',docs);
+  toast(old.length===1?'פיניתי מקום: נמחק מסמך אחד בן יותר מחודשיים':'פיניתי מקום: נמחקו '+old.length+' מסמכים בני יותר מחודשיים',5000);}
 
 /* ---------- loading ---------- */
 function loadToCanvas(blob,max){
@@ -707,18 +721,22 @@ async function openLib(){
   const show=docs.filter(d=>d.ids.length||d.id===S.docId);
   if(!show.some(d=>d.ids.length)){list.innerHTML='<li><p class="libempty">עוד אין מסמכים שמורים. כל מסמך שתצלם יופיע כאן.</p></li>';}
   else list.innerHTML=show.filter(d=>d.ids.length).map(d=>{const dt=new Date(d.updated);
-    return `<li data-row="${d.id}"><label class="pick"><input type="checkbox" data-pick="${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}${d.id===S.docId?' · <span class="cur">פתוח עכשיו</span>':''}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}).join('');
+    return `<li data-row="${d.id}"><label class="pick"><input type="checkbox" data-pick="${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}${d.id===S.docId?' · <span class="cur">פתוח עכשיו</span>':''}${cleanOn()&&d.id!==S.docId&&daysLeft(d)<=10?' · <span class="exp">יימחק בעוד '+Math.max(1,daysLeft(d))+' ימים</span>':''}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}).join('');
   list.querySelectorAll('[data-doc]').forEach(b=>{const d=docs.find(x=>x.id===+b.dataset.doc);b.querySelector('.ln').textContent=d.name;});
   libSel.clear();updateSel();$('#libAll').hidden=!list.querySelector('[data-pick]');
   $('#libBg').hidden=false;
   for(const el of list.querySelectorAll('[data-cover]')){const id=+el.dataset.cover;if(!id)continue;
     const m=await IDB.get('p:'+id);if(m&&m.out){const u=URL.createObjectURL(new Blob([m.out],{type:'image/jpeg'}));libUrls.push(u);el.innerHTML='<img alt="" src="'+u+'">';}}}
+$('#cleanChk').checked=cleanOn();
+$('#cleanChk').addEventListener('change',()=>{ls.set('scan-clean',$('#cleanChk').checked?'1':'0');
+  toast($('#cleanChk').checked?'פינוי אוטומטי פעיל: מסמכים בני יותר מחודשיים יימחקו':'פינוי אוטומטי כבוי: שום מסמך לא יימחק לבד');
+  if($('#cleanChk').checked)autoClean();openLib();});
 function closeLib(){$('#libBg').hidden=true;libSel.clear();selPrepared=null;}
 const libSel=new Set();let selPrepared=null;
 $('#selZip').checked=ls.get('scan-selzip')!=='0';
 $('#selZip').addEventListener('change',()=>ls.set('scan-selzip',$('#selZip').checked?'1':'0'));
 function updateSel(){const n=libSel.size;selPrepared=null;
-  $('#selBar').hidden=!n;$('#libMain').hidden=!!n;
+  $('#selBar').hidden=!n;$('#libMain').hidden=!!n;$('#cleanRow').hidden=!!n;
   $('#selCount').textContent=n===1?'נבחר מסמך אחד':'נבחרו '+n+' מסמכים';
   $('#selZip').closest('label').hidden=n<2;
   if(!canShareFiles)$('#selShare').hidden=true;
