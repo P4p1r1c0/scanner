@@ -267,6 +267,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
     <button class="pill" id="camClose">סגור</button>
     <span class="sp"></span>
     <button class="pill" id="camTorch" hidden aria-pressed="false">פנס</button>
+    <button class="pill" id="camFilter" aria-pressed="false">מקור</button>
     <button class="pill" id="camCrop" aria-pressed="true">חיתוך אוטומטי</button>
   </div>
   <div class="cambottom">
@@ -303,10 +304,8 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
   <div class="stage"><img id="editImg" alt="תצוגה מקדימה של העמוד"><div class="busy" id="editBusy"><span class="spin"></span></div></div>
   <div class="tools">
     <div class="chips" role="group" aria-label="מסנן">
-      <button class="chip" data-f="magic">משופר</button>
-      <button class="chip" data-f="gray">אפור</button>
-      <button class="chip" data-f="bw">שחור־לבן</button>
       <button class="chip" data-f="color">מקור</button>
+      <button class="chip" data-f="bw">שחור־לבן</button>
     </div>
     <button class="applyall" id="applyAll" hidden>החל את המסנן על כל העמודים</button>
     <div class="row">
@@ -324,6 +323,13 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
     <h2 id="saveTitle">שמירה ושיתוף</h2>
     <label for="saveName">שם הקובץ</label>
     <div class="namefield"><input id="saveName" autocomplete="off" enterkeyhint="done"><span id="saveExt">.pdf</span></div>
+    <div class="fmtwrap" id="styleWrap" hidden>
+      <span class="lbl">צבע</span>
+      <div class="fseg" id="styleSeg" role="group" aria-label="צבע" style="grid-template-columns:repeat(2,1fr)">
+        <button type="button" data-st="color">מקור</button>
+        <button type="button" data-st="bw">שחור־לבן</button>
+      </div>
+    </div>
     <div class="fmtwrap" id="fmtWrap" hidden>
       <span class="lbl">איך לשמור</span>
       <div class="fseg" id="fmtSeg" role="group" aria-label="צורת שמירה">
@@ -354,7 +360,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 11 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 12 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><button type="button" class="linkbtn" id="selClear">בטל בחירה</button></div>
       <label class="check" style="margin-top:6px"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label>
@@ -383,6 +389,7 @@ const tick=()=>new Promise(r=>setTimeout(r,20));
 function fmt(b){const kb=b/1024;return kb<1000?Math.max(1,Math.round(kb))+' ק״ב':(kb/1024).toFixed(1)+' מ״ב';}
 function mk(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
 let tt;function toast(m,ms){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),ms||2600);}
+function defFilter(){return ls.get('scan-filter')==='bw'?'bw':'color';}
 const toBlob=(cv,q)=>new Promise(r=>cv.toBlob(r,'image/jpeg',q));
 const ls={get(k){try{return localStorage.getItem(k);}catch(_){return null;}},set(k,v){try{localStorage.setItem(k,v);}catch(_){}},del(k){try{localStorage.removeItem(k);}catch(_){}}};
 
@@ -457,7 +464,7 @@ async function getSrc(pg){
   const cv=await loadToCanvas(pg.srcBlob,99999);srcCache={id:pg.id,cv};return cv;
 }
 async function pageFromCanvas(cv,corners){
-  const pg={id:++uid,srcBlob:await toBlob(cv,0.92),sw:cv.width,sh:cv.height,filter:'magic',rot:0,dirty:true,
+  const pg={id:++uid,srcBlob:await toBlob(cv,0.92),sw:cv.width,sh:cv.height,filter:defFilter(),rot:0,dirty:true,
     corners:corners||detectCorners(cv)||fullCorners(cv,0.04)};
   srcCache={id:pg.id,cv};S.pages.push(pg);
   await putSrc(pg);await savePage(pg);saveDoc();renderHome();return pg;}
@@ -650,6 +657,7 @@ async function shoot(){
 function renderCamUI(){
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===S.mode));
   $('#camCrop').setAttribute('aria-pressed',cam.crop);
+  $('#camFilter').textContent=defFilter()==='bw'?'שחור־לבן':'מקור';$('#camFilter').setAttribute('aria-pressed',defFilter()==='bw');
   $('#camCrop').textContent=cam.crop?'חיתוך אוטומטי':'בלי חיתוך';
   $('#camTorch').setAttribute('aria-pressed',cam.torch);
   const N=S.pages.length,last=S.pages[N-1],st=$('#camStack');
@@ -662,6 +670,8 @@ $('#camClose').onclick=()=>{S.retake=null;closeCam();};
 $('#camDone').onclick=()=>{const r=S.retake;S.retake=null;closeCam();scheduleSync(800);if(r){openEdit(r);return;}
   if(S.pages.length)openSaveAs(fname(),{formats:true});};
 $('#camStack').onclick=()=>$('#camDone').click();
+$('#camFilter').onclick=()=>{ls.set('scan-filter',defFilter()==='bw'?'color':'bw');renderCamUI();
+  toast(defFilter()==='bw'?'העמודים הבאים יישמרו בשחור־לבן':'העמודים הבאים יישמרו כמו המקור');};
 $('#camCrop').onclick=()=>{cam.crop=!cam.crop;ls.set('scan-crop',cam.crop?'1':'0');renderCamUI();
   toast(cam.crop?'כל תמונה תיחתך לפי קצוות הדף':'התמונה תישמר כמו שצולמה, בלי חיתוך');};
 $('#camTorch').onclick=async()=>{if(!cam.track)return;cam.torch=!cam.torch;
@@ -1096,6 +1106,10 @@ $('#zipChk').addEventListener('change',()=>ls.set('scan-zip',$('#zipChk').checke
 $('#saveName').addEventListener('input',updateFmt);
 function recent(){try{return JSON.parse(ls.get('scan-recent-names')||'[]');}catch(_){return [];}}
 function remember(n){ls.set('scan-recent-names',JSON.stringify([n,...recent().filter(x=>x!==n)].slice(0,6)));}
+function renderStyle(){const fs=new Set(S.pages.map(p=>p.filter==='bw'?'bw':'color'));
+  document.querySelectorAll('#styleSeg [data-st]').forEach(b=>b.setAttribute('aria-pressed',fs.size===1&&fs.has(b.dataset.st)));}
+$('#styleSeg').addEventListener('click',e=>{const b=e.target.closest('[data-st]');if(!b)return;const f=b.dataset.st;ls.set('scan-filter',f);
+  S.pages.forEach(p=>{if(p.filter!==f){p.filter=f;p.dirty=true;savePage(p);}});prepared=null;renderStyle();renderHome();processAllDirty();});
 function openSaveAs(name,job){
   saveJob=job;prepared=null;$('#saveName').value=name;
   $('#saveTitle').textContent=job.formats?(DBX.tok?'שמירה':'שמירה ושיתוף'):'שיתוף העמוד כ־JPG';
@@ -1104,7 +1118,7 @@ function openSaveAs(name,job){
   $('#saveShare').hidden=!canShareFiles;$('#saveShare').classList.toggle('primary',!dbxMode);
   $('#saveDl').classList.toggle('primary',!canShareFiles);
   $('#saveHint').textContent=dbxMode?'נשמר אוטומטית ב־Dropbox, אין צורך להוריד לטלפון. ״שתף״ שולח את הקובץ לוואטסאפ, מייל וכו׳.':canShareFiles?'שתף: וואטסאפ, מייל, Drive או Dropbox. הורד: נשמר בתיקיית ההורדות של הטלפון.':'הקובץ יישמר בתיקיית ההורדות של הטלפון.';
-  $('#fmtWrap').hidden=!job.formats;
+  $('#fmtWrap').hidden=!job.formats;$('#styleWrap').hidden=!job.formats;if(job.formats)renderStyle();
   const q=$('#quickNames');q.textContent='';const r=recent().filter(x=>x!==name);
   r.forEach(n=>{const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>{$('#saveName').value=n;updateFmt();};q.appendChild(b);});
   $('#quickWrap').hidden=!r.length;
