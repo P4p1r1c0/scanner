@@ -956,7 +956,12 @@ function isMulti(){return !!saveJob&&!!saveJob.formats&&saveFmt!=='pdf'&&S.pages
 function updateFmt(){
   if(!saveJob)return;prepared=null;
   const N=S.pages.length,multi=isMulti();
-  const ext=saveJob.formats?(multi&&saveFmt==='jpgs'?'jpg':'pdf'):saveJob.ext;
+  if(saveJob.formats&&N<2&&saveFmt==='pdfs')saveFmt='pdf';
+  const ext=saveJob.formats?(saveFmt==='jpgs'?'jpg':'pdf'):saveJob.ext;
+  const one=N<2,sb=$('#fmtSeg');sb.style.gridTemplateColumns=one?'repeat(2,1fr)':'';
+  sb.querySelector('[data-fmt="pdfs"]').hidden=one;
+  sb.querySelector('[data-fmt="pdf"]').textContent=one?'PDF':'PDF אחד';
+  sb.querySelector('[data-fmt="jpgs"]').textContent=one?'JPG (תמונה)':'JPG לכל עמוד';
   document.querySelectorAll('#fmtSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.fmt===saveFmt));
   $('#zipRow').hidden=!multi;$('#saveExt').textContent='.'+ext;
   const n=cleanName()||'…',np=$('#namesPreview');np.hidden=!multi;
@@ -969,7 +974,7 @@ function remember(n){ls.set('scan-recent-names',JSON.stringify([n,...recent().fi
 function openSaveAs(name,job){
   saveJob=job;prepared=null;$('#saveName').value=name;
   $('#saveTitle').textContent=job.formats?'שמירה ושיתוף':'שיתוף העמוד כ־JPG';
-  $('#fmtWrap').hidden=!job.formats||S.pages.length<2;
+  $('#fmtWrap').hidden=!job.formats;
   const q=$('#quickNames');q.textContent='';const r=recent().filter(x=>x!==name);
   r.forEach(n=>{const b=document.createElement('button');b.type='button';b.textContent=n;b.onclick=()=>{$('#saveName').value=n;updateFmt();};q.appendChild(b);});
   $('#quickWrap').hidden=!r.length;
@@ -984,7 +989,8 @@ async function prepare(n){
   let files;
   if(!saveJob.formats)files=[{name:n+'.jpg',blob:await saveJob.make()}];
   else{await processAllDirty();const pages=S.pages.slice(),N=pages.length;
-    if(!isMulti())files=[{name:n+'.pdf',blob:await buildPdf(pages)}];
+    if(N===1&&saveFmt==='jpgs')files=[{name:n+'.jpg',blob:pages[0].blob}];
+    else if(!isMulti())files=[{name:n+'.pdf',blob:await buildPdf(pages)}];
     else{const ext=saveFmt==='jpgs'?'jpg':'pdf';files=[];
       for(let i=0;i<N;i++)files.push({name:partName(n,i+1,N)+'.'+ext,blob:ext==='jpg'?pages[i].blob:await buildPdf([pages[i]])});}}
   prepared={key,files};return files;}
