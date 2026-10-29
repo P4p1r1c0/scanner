@@ -39,7 +39,7 @@ img{max-width:100%}
 /* Home */
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:12px max(18px,env(safe-area-inset-right,0px)) 10px max(18px,env(safe-area-inset-left,0px))}
 .brand{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px;font-weight:600}
-.brand #count{flex:1}
+.brand #count{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hbtn{background:none;border:1px solid var(--line);border-radius:999px;color:var(--text);padding:6px 12px;font-size:14px;font-weight:700}
 .hbtn.install{background:var(--mark);border-color:var(--mark);color:#1A1A1A}
 .docname{width:100%;margin-top:6px;background:none;border:0;border-bottom:2px solid var(--line);color:var(--text);font:800 28px/1.2 "Assistant",sans-serif;padding:4px 0 6px}
@@ -178,6 +178,19 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 .lib .cur{color:var(--ink);font-weight:700}
 .lib .exp{color:var(--danger);font-weight:700}
 .cleanrow{margin:14px 0 0;font-size:15px;color:var(--muted)}
+.dbxbox{margin:6px 0 10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:15px;color:var(--muted)}
+.dbxbox p{margin:0 0 10px}
+.dbxbox .btn{width:100%}
+.dbxbox .st{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:700}
+.dbxbox .st .linkbtn{margin-inline-start:auto}
+.dot{width:9px;height:9px;border-radius:50%;background:#2E9E5B;flex:0 0 auto}
+.dot.up{background:var(--mark)}.dot.err{background:var(--danger)}
+.dbxbox small{display:block;margin-top:4px;font-size:13px;font-weight:600;color:var(--muted)}
+.lib li.sec{border:0;padding:14px 0 2px;font-size:13px;font-weight:800;color:var(--muted)}
+.lib .lt.pdf{display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--danger)}
+.lib .wait{color:#B7791F;font-weight:700}
+.sync{font-size:13px;font-weight:700;color:var(--muted);padding:3px 9px;border-radius:999px;background:var(--sheet);border:1px solid var(--line);white-space:nowrap}
+.sync.err{color:var(--danger)}
 .cleanrow .check{margin:0 0 2px}
 .lib .del{background:none;border:0;color:var(--danger);font-weight:700;padding:8px}
 .lib .pick{flex:0 0 auto;display:grid;place-items:center;width:40px;height:44px;margin:0;cursor:pointer}
@@ -199,7 +212,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 </head>
 <body>
 <header>
-  <div class="brand"><span id="count">סורק מסמכים</span>
+  <div class="brand"><span id="count">סורק מסמכים</span><span class="sync" id="syncChip" hidden></span>
     <button class="hbtn install" id="installBtn" hidden>התקן</button>
     <button class="hbtn" id="libBtn">המסמכים שלי</button>
     <button class="hbtn" id="newBtn" hidden>חדש</button></div>
@@ -319,6 +332,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 <div class="sheet-bg" id="libBg" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle">
     <div class="libhead"><h2 id="libTitle">המסמכים שלי</h2><button type="button" class="linkbtn" id="libAll" hidden>בחר הכל</button></div>
+    <div class="dbxbox" id="dbxBox"></div>
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
@@ -364,33 +378,38 @@ try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}c
 let restoring=true;
 function saveDoc(){if(restoring)return;
   const e={id:S.docId,name:$('#docName').value.trim()||today(),preset:S.preset,ids:S.pages.map(p=>p.id),cover:S.pages[0]?S.pages[0].id:null,updated:Date.now()};
-  const i=docs.findIndex(d=>d.id===S.docId);if(i>=0)docs[i]=e;else docs.unshift(e);
+  const i=docs.findIndex(d=>d.id===S.docId);
+  if(i>=0){const o=docs[i];e.path=o.path;e.sig=o.sig;e.synced=o.synced;docs[i]=e;}else docs.unshift(e);
   docs.sort((a,b)=>b.updated-a.updated);
-  IDB.set('docs',docs);IDB.set('cur',S.docId);IDB.set('uid',uid);}
+  IDB.set('docs',docs);IDB.set('cur',S.docId);IDB.set('uid',uid);scheduleSync();}
 async function putSrc(pg){try{await IDB.set('s:'+pg.id,await pg.srcBlob.arrayBuffer());}catch(_){}}
 async function savePage(pg){if(!S.pages.includes(pg))return;
   try{const out=pg.blob&&!pg.dirty?await pg.blob.arrayBuffer():null;
-    await IDB.set('p:'+pg.id,{id:pg.id,sw:pg.sw,sh:pg.sh,corners:pg.corners,rot:pg.rot,filter:pg.filter,out,w:pg.w,h:pg.h});}catch(_){}}
+    await IDB.set('p:'+pg.id,{id:pg.id,sw:pg.sw,sh:pg.sh,corners:pg.corners,rot:pg.rot,filter:pg.filter,out,w:pg.w,h:pg.h,sv:pg.sv||0});}catch(_){}
+  scheduleSync();}
 function dropPage(id){IDB.del('p:'+id);IDB.del('s:'+id);}
 function clearPages(){S.pages.forEach(p=>p.url&&URL.revokeObjectURL(p.url));S.pages=[];srcCache={id:null,cv:null};}
+function freezeCur(){const cd=docs.find(x=>x.id===S.docId);if(cd&&cd.ids.length)cd.sig0=sigOf(cd);}
 async function loadDoc(d){
-  restoring=true;clearPages();S.docId=d.id;$('#docName').value=d.name||today();if(PRESETS[d.preset])S.preset=d.preset;
+  freezeCur();restoring=true;clearPages();S.docId=d.id;$('#docName').value=d.name||today();if(PRESETS[d.preset])S.preset=d.preset;
   for(const id of d.ids||[]){const m=await IDB.get('p:'+id),s=await IDB.get('s:'+id);if(!m||!s)continue;
-    const pg={id:m.id,sw:m.sw,sh:m.sh,corners:m.corners,rot:m.rot||0,filter:m.filter||'magic',srcBlob:new Blob([s],{type:'image/jpeg'}),dirty:!m.out,w:m.w,h:m.h};
+    const pg={id:m.id,sv:m.sv||0,sw:m.sw,sh:m.sh,corners:m.corners,rot:m.rot||0,filter:m.filter||'magic',srcBlob:new Blob([s],{type:'image/jpeg'}),dirty:!m.out,w:m.w,h:m.h};
     if(m.out){pg.blob=new Blob([m.out],{type:'image/jpeg'});pg.url=URL.createObjectURL(pg.blob);}
     S.pages.push(pg);uid=Math.max(uid,id);}
   restoring=false;IDB.set('cur',S.docId);renderHome();processAllDirty();}
-function newDoc(){clearPages();S.docId=Date.now();$('#docName').value=today();docs=docs.filter(d=>d.ids.length);saveDoc();renderHome();}
+function newDoc(){freezeCur();clearPages();S.docId=Date.now();$('#docName').value=today();docs=docs.filter(d=>d.ids.length);saveDoc();renderHome();}
 async function startup(){
+  DBX.tok=await IDB.get('dbx');await dbxHandleRedirect();
   docs=(await IDB.get('docs'))||[];uid=(await IDB.get('uid'))||0;
   const cur=await IDB.get('cur'),d=docs.find(x=>x.id===cur);
   if(d)await loadDoc(d);else{restoring=false;saveDoc();}
-  renderHome();autoClean();}
+  renderHome();if(DBX.tok){setSync('');scheduleSync(1500);}else autoClean();
+  if(justConnected)openLib();}
 const KEEP_DAYS=60,DAY=864e5;
 function cleanOn(){return ls.get('scan-clean')!=='0';}
 function daysLeft(d){return Math.ceil((d.updated+KEEP_DAYS*DAY-Date.now())/DAY);}
 function autoClean(){
-  if(!cleanOn())return;
+  if(!cleanOn()||DBX.tok)return;
   const old=docs.filter(d=>d.id!==S.docId&&d.ids.length&&daysLeft(d)<=0);
   if(!old.length)return;
   old.forEach(d=>d.ids.forEach(dropPage));
@@ -420,7 +439,7 @@ async function pageFromCanvas(cv,corners){
   await putSrc(pg);await savePage(pg);saveDoc();renderHome();return pg;}
 async function addFromFile(file){return pageFromCanvas(await loadToCanvas(file,3000));}
 async function replaceSrc(pg,cv,corners){
-  pg.srcBlob=await toBlob(cv,0.92);pg.sw=cv.width;pg.sh=cv.height;pg.rot=0;pg.dirty=true;
+  pg.srcBlob=await toBlob(cv,0.92);pg.sw=cv.width;pg.sh=cv.height;pg.rot=0;pg.dirty=true;pg.sv=Date.now();
   pg.corners=corners||detectCorners(cv)||fullCorners(cv,0.04);srcCache={id:pg.id,cv};
   await putSrc(pg);await savePage(pg);}
 
@@ -523,7 +542,7 @@ async function doProcess(pg){
     let cv=warp(src,pg.corners,P.long);cv=rotate(cv,pg.rot);cv=applyFilter(cv,pg.filter);
     const blob=await toBlob(cv,pg.filter==='bw'?P.q-0.1:P.q);
     if(pg.url)URL.revokeObjectURL(pg.url);pg.blob=blob;pg.url=URL.createObjectURL(blob);pg.w=cv.width;pg.h=cv.height;pg.dirty=false;
-    savePage(pg);if(pg===S.pages[0])saveDoc();
+    savePage(pg);if(pg===S.pages[0])saveDoc();scheduleSync(4000);
   }catch(e){toast('העיבוד נכשל. נסה לצלם שוב.');}
   pg.busy=false;refreshAll();}
 function processPage(pg){queue=queue.then(()=>doProcess(pg)).catch(()=>{});return queue;}
@@ -616,7 +635,7 @@ function renderCamUI(){
   $('#camDone').textContent=S.retake?'ביטול':(N?'סיום ('+N+')':'סגור');}
 $('#camShot').onclick=()=>shoot();
 $('#camClose').onclick=()=>{S.retake=null;closeCam();};
-$('#camDone').onclick=()=>{const r=S.retake;S.retake=null;closeCam();if(r){openEdit(r);return;}
+$('#camDone').onclick=()=>{const r=S.retake;S.retake=null;closeCam();scheduleSync(800);if(r){openEdit(r);return;}
   if(S.pages.length)openSaveAs(fname(),{formats:true});};
 $('#camStack').onclick=()=>$('#camDone').click();
 $('#camCrop').onclick=()=>{cam.crop=!cam.crop;ls.set('scan-crop',cam.crop?'1':'0');renderCamUI();
@@ -714,19 +733,138 @@ window.addEventListener('appinstalled',()=>{$('#installBtn').hidden=true;install
 $('#installBtn').onclick=async()=>{if(!installEvt)return;installEvt.prompt();try{await installEvt.userChoice;}catch(_){}installEvt=null;$('#installBtn').hidden=true;};
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 
+/* ---------- Dropbox ---------- */
+const DBX={key:'b90eflffr96ahlh',redirect:location.origin+location.pathname,tok:null};
+let justConnected=false,dbxFiles=[],dbxListed=false;
+function b64url(buf){let s='';new Uint8Array(buf).forEach(b=>s+=String.fromCharCode(b));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+async function dbxConnect(){
+  try{const v=b64url(crypto.getRandomValues(new Uint8Array(48)));ls.set('dbx-ver',v);
+    const ch=b64url(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)));
+    saveDoc();
+    location.href='https://www.dropbox.com/oauth2/authorize?'+new URLSearchParams({client_id:DBX.key,response_type:'code',code_challenge:ch,code_challenge_method:'S256',redirect_uri:DBX.redirect,token_access_type:'offline'});}
+  catch(_){toast('החיבור ל־Dropbox לא זמין בדפדפן הזה.');}}
+async function dbxHandleRedirect(){
+  const q=new URLSearchParams(location.search),code=q.get('code');
+  if(!code&&!q.get('error'))return;
+  history.replaceState(history.state,'',DBX.redirect);
+  if(!code){toast('החיבור ל־Dropbox בוטל');return;}
+  try{const r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',body:new URLSearchParams({code,grant_type:'authorization_code',client_id:DBX.key,redirect_uri:DBX.redirect,code_verifier:ls.get('dbx-ver')||''})});
+    if(!r.ok)throw 0;const j=await r.json();
+    DBX.tok={access:j.access_token,refresh:j.refresh_token,exp:Date.now()+((j.expires_in||14400)-120)*1000};
+    await IDB.set('dbx',DBX.tok);ls.del('dbx-ver');justConnected=true;
+    toast('מחובר ל־Dropbox. המסמכים יישמרו שם.',4000);}
+  catch(_){toast('החיבור ל־Dropbox נכשל. נסה שוב.',4000);}}
+async function dbxOff(expired){DBX.tok=null;dbxFiles=[];await IDB.del('dbx');setSync('');
+  if(expired)toast('צריך להתחבר מחדש ל־Dropbox',5000);}
+async function dbxToken(){
+  if(!DBX.tok)throw{code:'off'};
+  if(Date.now()<DBX.tok.exp)return DBX.tok.access;
+  let r;try{r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',body:new URLSearchParams({grant_type:'refresh_token',refresh_token:DBX.tok.refresh,client_id:DBX.key})});}catch(_){throw{code:'net'};}
+  if(r.status===400||r.status===401){await dbxOff(true);throw{code:'auth'};}
+  if(!r.ok)throw{code:'net'};
+  const j=await r.json();DBX.tok.access=j.access_token;DBX.tok.exp=Date.now()+((j.expires_in||14400)-120)*1000;IDB.set('dbx',DBX.tok);
+  return DBX.tok.access;}
+function hdrArg(o){return JSON.stringify(o).replace(/[\u007f-￿]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'));}
+async function dbxCall(ep,body,o){o=o||{};
+  for(let k=0;k<2;k++){
+    const t=await dbxToken(),h={Authorization:'Bearer '+t};let url,opt;
+    if(o.content){url='https://content.dropboxapi.com/2/'+ep;h['Dropbox-API-Arg']=hdrArg(o.arg);
+      if(o.blob)h['Content-Type']='application/octet-stream';opt={method:'POST',headers:h,body:o.blob||undefined};}
+    else{url='https://api.dropboxapi.com/2/'+ep;h['Content-Type']='application/json';opt={method:'POST',headers:h,body:JSON.stringify(body)};}
+    let r;try{r=await fetch(url,opt);}catch(_){throw{code:'net'};}
+    if(r.status===401&&k===0){DBX.tok.exp=0;continue;}
+    if(!r.ok){let txt='';try{txt=await r.text();}catch(_){}throw{code:'api',status:r.status,txt};}
+    return o.raw?r.blob():r.json();}
+  throw{code:'auth'};}
+async function dbxList(){
+  let j=await dbxCall('files/list_folder',{path:'',recursive:false});let all=j.entries;
+  while(j.has_more){j=await dbxCall('files/list_folder/continue',{cursor:j.cursor});all=all.concat(j.entries);}
+  dbxFiles=all.filter(e=>e['.tag']==='file').sort((a,b)=>(b.server_modified||'').localeCompare(a.server_modified||''));dbxListed=true;
+  return dbxFiles;}
+const dbxGet=path=>dbxCall('files/download',null,{content:true,arg:{path},raw:true});
+
+/* sync: every document goes up as one PDF; once it is not the open document, the phone copy is removed */
+let syncing=false,syncT=0,syncSt='';
+function safeName(n){return (n||'מסמך').replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim()||'מסמך';}
+function sigOf(d){
+  if(d.id===S.docId)return safeName($('#docName').value.trim()||today())+'|'+S.preset+'|'+S.pages.map(p=>[p.id,p.filter,p.rot,p.sv||0,(p.corners||[]).map(c=>Math.round(c.x)+','+Math.round(c.y)).join(';')].join(':')).join('/');
+  return d.sig0||('x'+d.updated);}
+function scheduleSync(ms){if(!DBX.tok)return;clearTimeout(syncT);syncT=setTimeout(syncAll,ms==null?4000:ms);}
+function pendingCount(){return docs.filter(d=>d.ids.length&&d.sig!==sigOf(d)).length;}
+function setSync(st){syncSt=st;const c=$('#syncChip');
+  if(!DBX.tok){c.hidden=true;}
+  else{c.hidden=false;c.classList.toggle('err',st==='err');
+    c.textContent=st==='up'?'מעלה ל־Dropbox…':st==='wait'?'ממתין לאינטרנט':st==='err'?'לא הועלה, אנסה שוב':pendingCount()?'ממתין להעלאה':'שמור ב־Dropbox';}
+  if(!$('#libBg').hidden)renderDbxBox();}
+async function syncAll(){
+  if(!DBX.tok||syncing)return;
+  if(!navigator.onLine){setSync('wait');return;}
+  const busyCur=!$('#camScreen').hidden||!$('#cropScreen').hidden||!$('#editScreen').hidden||S.pages.some(p=>p.dirty||p.busy);
+  syncing=true;let n=0,fail=false,removed=0;
+  try{
+    for(const d of docs.slice()){
+      if(!d.ids.length)continue;
+      const cur=d.id===S.docId;if(cur&&busyCur)continue;
+      const sig=sigOf(d);
+      if(d.sig!==sig){
+        setSync('up');
+        const blob=await docPdf(d);if(!blob)continue;
+        const want='/'+safeName(cur?($('#docName').value.trim()||today()):d.name)+'.pdf';
+        let res;
+        if(d.path&&d.path.toLowerCase()===want.toLowerCase())res=await dbxCall('files/upload',null,{content:true,blob,arg:{path:d.path,mode:'overwrite',mute:true}});
+        else{res=await dbxCall('files/upload',null,{content:true,blob,arg:{path:want,mode:'add',autorename:true,mute:true}});
+          if(d.path){try{await dbxCall('files/delete_v2',{path:d.path});}catch(_){}}}
+        d.path=res.path_display;d.sig=sig;d.synced=Date.now();n++;IDB.set('docs',docs);}
+      if(!cur&&d.sig===sigOf(d)){d.ids.forEach(dropPage);docs=docs.filter(x=>x!==d);IDB.set('docs',docs);removed++;}}
+  }catch(e){fail=true;}
+  syncing=false;
+  if(fail){setSync(navigator.onLine?'err':'wait');if(DBX.tok)scheduleSync(60000);}
+  else{setSync(busyCur?'':'ok');if(busyCur)scheduleSync(5000);}
+  if((n||removed)&&!$('#libBg').hidden&&!libSel.size)openLib(true);}
+window.addEventListener('online',()=>scheduleSync(1000));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&DBX.tok)syncAll();});
+
 /* ---------- library ---------- */
 const libUrls=[];
-async function openLib(){
+function fmtDate(t){const dt=new Date(t);return dt.getDate()+'.'+(dt.getMonth()+1)+'.'+dt.getFullYear()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');}
+function renderDbxBox(){const b=$('#dbxBox');
+  if(!DBX.tok){b.innerHTML='<p>אפשר לשמור את המסמכים ב־Dropbox במקום בטלפון. כל מסמך עולה כ־PDF לתיקייה Apps/Sorek Scanner P4p1r1c0, והעותק בטלפון נמחק.</p><button type="button" class="btn primary" id="dbxConnect">חבר ל־Dropbox</button>';
+    $('#dbxConnect').onclick=dbxConnect;return;}
+  const p=pendingCount(),cls=syncSt==='err'||syncSt==='wait'?'err':(syncSt==='up'||p)?'up':'';
+  const txt=syncSt==='up'?'מעלה…':syncSt==='wait'?'אין אינטרנט, אעלה כשיחזור':syncSt==='err'?'ההעלאה נכשלה, אנסה שוב בעוד דקה':p?(p===1?'מסמך אחד ממתין להעלאה':p+' מסמכים ממתינים להעלאה'):'הכל שמור ב־Dropbox';
+  b.innerHTML='<div class="st"><span class="dot '+cls+'"></span><span>מחובר ל־Dropbox · '+txt+'</span><button type="button" class="linkbtn" id="dbxOffBtn">נתק</button></div><small>המסמך הפתוח נשאר בטלפון לעריכה. כשמתחילים מסמך חדש, הקודם נמחק מהטלפון ונשאר רק ב־Dropbox.</small>';
+  $('#dbxOffBtn').onclick=async()=>{await dbxOff(false);toast('נותק מ־Dropbox. מסמכים חדשים יישמרו בטלפון.');openLib();};}
+function localRow(d){
+  const st=d.id===S.docId?' · <span class="cur">פתוח עכשיו</span>':'';
+  const up=DBX.tok&&d.sig!==sigOf(d)?' · <span class="wait">ממתין להעלאה</span>':'';
+  const ex=!DBX.tok&&cleanOn()&&d.id!==S.docId&&daysLeft(d)<=10?' · <span class="exp">יימחק בעוד '+Math.max(1,daysLeft(d))+' ימים</span>':'';
+  return `<li><label class="pick"><input type="checkbox" data-pick="l:${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln" data-name="l:${d.id}"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${fmtDate(d.updated)}${st}${up}${ex}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}
+function dbxRow(f,i){
+  return `<li><label class="pick"><input type="checkbox" data-pick="d:${i}" aria-label="בחר מסמך"></label><button class="open" data-dl="${i}"><span class="lt pdf">PDF</span><span style="min-width:0"><span class="ln" data-name="d:${i}"></span><span class="ls">${fmtDate(Date.parse(f.server_modified))} · ${fmt(f.size)}</span></span></button><button class="del" data-ddel="${i}">מחק</button></li>`;}
+async function openLib(keep){
   saveDoc();const list=$('#libList');libUrls.forEach(u=>URL.revokeObjectURL(u));libUrls.length=0;
-  const show=docs.filter(d=>d.ids.length||d.id===S.docId);
-  if(!show.some(d=>d.ids.length)){list.innerHTML='<li><p class="libempty">עוד אין מסמכים שמורים. כל מסמך שתצלם יופיע כאן.</p></li>';}
-  else list.innerHTML=show.filter(d=>d.ids.length).map(d=>{const dt=new Date(d.updated);
-    return `<li data-row="${d.id}"><label class="pick"><input type="checkbox" data-pick="${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${dt.getDate()}.${dt.getMonth()+1}.${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}${d.id===S.docId?' · <span class="cur">פתוח עכשיו</span>':''}${cleanOn()&&d.id!==S.docId&&daysLeft(d)<=10?' · <span class="exp">יימחק בעוד '+Math.max(1,daysLeft(d))+' ימים</span>':''}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}).join('');
-  list.querySelectorAll('[data-doc]').forEach(b=>{const d=docs.find(x=>x.id===+b.dataset.doc);b.querySelector('.ln').textContent=d.name;});
-  libSel.clear();updateSel();$('#libAll').hidden=!list.querySelector('[data-pick]');
+  renderDbxBox();$('#cleanRow').hidden=!!DBX.tok;
+  const cd=docs.find(d=>d.id===S.docId);
+  const local=docs.filter(d=>d.ids.length&&(!DBX.tok||d.id===S.docId||d.sig!==sigOf(d)));
+  let html='';
+  if(DBX.tok){
+    if(local.length)html+='<li class="sec">בטלפון</li>'+local.map(localRow).join('');
+    html+='<li class="sec">ב־Dropbox</li><li id="dbxLoading"><p class="libempty">'+(dbxListed?'מעדכן…':'טוען מ־Dropbox…')+'</p></li>';}
+  else html=local.length?local.map(localRow).join(''):'<li><p class="libempty">עוד אין מסמכים שמורים. כל מסמך שתצלם יופיע כאן.</p></li>';
+  list.innerHTML=html;
+  list.querySelectorAll('[data-name^="l:"]').forEach(el=>{const d=docs.find(x=>x.id===+el.dataset.name.slice(2));el.textContent=d?d.name:'';});
+  if(!keep)libSel.clear();updateSel();
   $('#libBg').hidden=false;
   for(const el of list.querySelectorAll('[data-cover]')){const id=+el.dataset.cover;if(!id)continue;
-    const m=await IDB.get('p:'+id);if(m&&m.out){const u=URL.createObjectURL(new Blob([m.out],{type:'image/jpeg'}));libUrls.push(u);el.innerHTML='<img alt="" src="'+u+'">';}}}
+    const m=await IDB.get('p:'+id);if(m&&m.out){const u=URL.createObjectURL(new Blob([m.out],{type:'image/jpeg'}));libUrls.push(u);el.innerHTML='<img alt="" src="'+u+'">';}}
+  if(DBX.tok){
+    let files;try{files=await dbxList();}catch(e){const l=$('#dbxLoading');if(l)l.innerHTML='<p class="libempty">'+(e&&e.code==='net'?'אין חיבור לאינטרנט. הרשימה מ־Dropbox תופיע כשיחזור.':'לא הצלחתי לטעון את הרשימה מ־Dropbox.')+'</p>';return;}
+    const l=$('#dbxLoading');if(!l)return;
+    const curPath=cd&&cd.path&&cd.sig===sigOf(cd)?cd.path.toLowerCase():'';
+    const rows=files.map((f,i)=>f.path_lower===curPath?'':dbxRow(f,i)).join('');
+    l.outerHTML=rows||'<li><p class="libempty">עוד אין מסמכים ב־Dropbox.</p></li>';
+    list.querySelectorAll('[data-name^="d:"]').forEach(el=>{el.textContent=dbxFiles[+el.dataset.name.slice(2)].name.replace(/\.pdf$/i,'');});
+    updateSel();}}
 $('#cleanChk').checked=cleanOn();
 $('#cleanChk').addEventListener('change',()=>{ls.set('scan-clean',$('#cleanChk').checked?'1':'0');
   toast($('#cleanChk').checked?'פינוי אוטומטי פעיל: מסמכים בני יותר מחודשיים יימחקו':'פינוי אוטומטי כבוי: שום מסמך לא יימחק לבד');
@@ -735,18 +873,21 @@ function closeLib(){$('#libBg').hidden=true;libSel.clear();selPrepared=null;}
 const libSel=new Set();let selPrepared=null;
 $('#selZip').checked=ls.get('scan-selzip')!=='0';
 $('#selZip').addEventListener('change',()=>ls.set('scan-selzip',$('#selZip').checked?'1':'0'));
-function updateSel(){const n=libSel.size;selPrepared=null;
-  $('#selBar').hidden=!n;$('#libMain').hidden=!!n;$('#cleanRow').hidden=!!n;
+function updateSel(){
+  const picks=[...document.querySelectorAll('#libList [data-pick]')],live=new Set(picks.map(c=>c.dataset.pick));
+  [...libSel].forEach(k=>{if(!live.has(k))libSel.delete(k);});
+  const n=libSel.size;selPrepared=null;
+  $('#selBar').hidden=!n;$('#libMain').hidden=!!n;$('#cleanRow').hidden=!!n||!!DBX.tok;
   $('#selCount').textContent=n===1?'נבחר מסמך אחד':'נבחרו '+n+' מסמכים';
   $('#selZip').closest('label').hidden=n<2;
   if(!canShareFiles)$('#selShare').hidden=true;
-  document.querySelectorAll('#libList [data-pick]').forEach(c=>{c.checked=libSel.has(+c.dataset.pick);c.closest('li').classList.toggle('sel',c.checked);});
-  const all=document.querySelectorAll('#libList [data-pick]').length;
-  $('#libAll').textContent=n&&n===all?'נקה הכל':'בחר הכל';}
+  picks.forEach(c=>{c.checked=libSel.has(c.dataset.pick);c.closest('li').classList.toggle('sel',c.checked);});
+  $('#libAll').hidden=!picks.length;
+  $('#libAll').textContent=n&&n===picks.length?'נקה הכל':'בחר הכל';}
 $('#libList').addEventListener('change',e=>{const c=e.target.closest('[data-pick]');if(!c)return;
-  const id=+c.dataset.pick;if(c.checked)libSel.add(id);else libSel.delete(id);updateSel();});
-$('#libAll').onclick=()=>{const ids=[...document.querySelectorAll('#libList [data-pick]')].map(c=>+c.dataset.pick);
-  if(libSel.size===ids.length)libSel.clear();else ids.forEach(i=>libSel.add(i));updateSel();};
+  if(c.checked)libSel.add(c.dataset.pick);else libSel.delete(c.dataset.pick);updateSel();});
+$('#libAll').onclick=()=>{const ks=[...document.querySelectorAll('#libList [data-pick]')].map(c=>c.dataset.pick);
+  if(libSel.size===ks.length)libSel.clear();else ks.forEach(k=>libSel.add(k));updateSel();};
 $('#selClear').onclick=()=>{libSel.clear();updateSel();};
 async function storedPage(id,preset){
   const m=await IDB.get('p:'+id);if(!m)return null;
@@ -756,16 +897,16 @@ async function storedPage(id,preset){
   let cv=warp(src,m.corners||fullCorners(src,0),P.long);cv=rotate(cv,m.rot||0);cv=applyFilter(cv,m.filter||'magic');
   return{blob:await toBlob(cv,m.filter==='bw'?P.q-0.1:P.q),w:cv.width,h:cv.height};}
 async function docPdf(d){
-  if(d.id===S.docId){await processAllDirty();return buildPdf(S.pages.slice());}
+  if(d.id===S.docId){await processAllDirty();return S.pages.length?buildPdf(S.pages.slice()):null;}
   const pages=[];for(const id of d.ids){const p=await storedPage(id,d.preset);if(p)pages.push(p);}
   return pages.length?buildPdf(pages):null;}
 async function prepareSel(){
   const key=[...libSel].sort().join(',');if(selPrepared&&selPrepared.key===key)return selPrepared.files;
   const used=new Set(),files=[];
-  for(const d of docs.filter(x=>libSel.has(x.id))){
-    const blob=await docPdf(d);if(!blob)continue;
-    let base=(d.name||'מסמך').replace(/[\\/:*?"<>|]+/g,'-').trim()||'מסמך',n=base,i=2;
-    while(used.has(n))n=base+' ('+(i++)+')';used.add(n);files.push({name:n+'.pdf',blob});}
+  const add=(base,blob)=>{let n=base,i=2;while(used.has(n))n=base+' ('+(i++)+')';used.add(n);files.push({name:n+'.pdf',blob});};
+  for(const k of libSel){
+    if(k.startsWith('l:')){const d=docs.find(x=>x.id===+k.slice(2));if(!d)continue;const blob=await docPdf(d);if(blob)add(safeName(d.id===S.docId?$('#docName').value:d.name),blob);}
+    else{const f=dbxFiles[+k.slice(2)];if(!f)continue;add(f.name.replace(/\.pdf$/i,''),await dbxGet(f.path_lower));}}
   selPrepared={key,files};return files;}
 function zipName(){const d=new Date();return 'מסמכים '+d.getDate()+'-'+(d.getMonth()+1)+'-'+d.getFullYear()+'.zip';}
 $('#selDl').onclick=async()=>{if(!libSel.size)return;const b=$('#selDl');b.disabled=true;b.textContent='מכין…';
@@ -773,26 +914,36 @@ $('#selDl').onclick=async()=>{if(!libSel.size)return;const b=$('#selDl');b.disab
     if(files.length>1&&$('#selZip').checked)download(zipName(),await buildZip(files));
     else for(let i=0;i<files.length;i++){download(files[i].name,files[i].blob);if(i<files.length-1)await new Promise(r=>setTimeout(r,450));}
     toast(files.length>1?'הורדו '+files.length+' מסמכים':'הורד: '+files[0].name);}
-  catch(_){toast('ההורדה נכשלה. נסה שוב.');}
+  catch(e){toast(e&&e.code==='net'?'אין חיבור לאינטרנט. נסה שוב.':'ההורדה נכשלה. נסה שוב.');}
   b.disabled=false;b.textContent='הורד';};
 $('#selShare').onclick=async()=>{if(!libSel.size)return;const b=$('#selShare');b.disabled=true;b.textContent='מכין…';
   try{const files=await prepareSel();if(!files.length)throw 0;
     const fl=files.map(f=>new File([f.blob],f.name,{type:'application/pdf'}));
     try{await navigator.share({files:fl,title:files.length>1?files.length+' מסמכים':files[0].name});}
     catch(err){if(err&&err.name==='NotAllowedError')toast('הקבצים מוכנים. לחץ שוב על שתף.');else if(!(err&&err.name==='AbortError'))toast('השיתוף לא הצליח. נסה ״הורד״.');}}
-  catch(_){toast('ההכנה נכשלה. נסה שוב.');}
+  catch(e){toast(e&&e.code==='net'?'אין חיבור לאינטרנט. נסה שוב.':'ההכנה נכשלה. נסה שוב.');}
   b.disabled=false;b.textContent='שתף';};
-$('#libBtn').onclick=openLib;$('#libClose').onclick=closeLib;
+$('#libBtn').onclick=()=>openLib();$('#libClose').onclick=closeLib;
 $('#libBg').addEventListener('click',e=>{if(e.target.id==='libBg')closeLib();});
 $('#libNew').onclick=()=>{closeLib();newDoc();};
-let libArm={id:0,t:0};
+let libArm={k:'',t:0};
+function armed(btn,k){if(libArm.k!==k||Date.now()-libArm.t>3000){libArm={k,t:Date.now()};btn.textContent='לחץ שוב';setTimeout(()=>{if(btn.isConnected)btn.textContent='מחק';},3000);return false;}libArm={k:'',t:0};return true;}
 $('#libList').addEventListener('click',async e=>{
   const o=e.target.closest('[data-doc]');
   if(o){const d=docs.find(x=>x.id===+o.dataset.doc);closeLib();if(d&&d.id!==S.docId){await loadDoc(d);toast('נפתח: '+d.name);}return;}
+  const g=e.target.closest('[data-dl]');
+  if(g){const f=dbxFiles[+g.dataset.dl];if(!f)return;toast('מוריד מ־Dropbox…',8000);
+    try{download(f.name,await dbxGet(f.path_lower));toast('הורד: '+f.name);}catch(err){toast(err&&err.code==='net'?'אין חיבור לאינטרנט.':'ההורדה נכשלה.');}return;}
+  const dd=e.target.closest('[data-ddel]');
+  if(dd){const f=dbxFiles[+dd.dataset.ddel];if(!f||!armed(dd,'d'+f.path_lower))return;
+    try{await dbxCall('files/delete_v2',{path:f.path_lower});
+      docs.forEach(d=>{if(d.path&&d.path.toLowerCase()===f.path_lower){d.path=null;d.sig=null;}});
+      toast('נמחק מ־Dropbox. אפשר לשחזר אותו מ״קבצים שנמחקו״ ב־Dropbox.',5000);openLib();}
+    catch(err){toast('המחיקה נכשלה. נסה שוב.');}return;}
   const del=e.target.closest('[data-del]');if(!del)return;const id=+del.dataset.del;
-  if(libArm.id!==id||Date.now()-libArm.t>3000){libArm={id,t:Date.now()};del.textContent='לחץ שוב';setTimeout(()=>{if(del.isConnected)del.textContent='מחק';},3000);return;}
+  if(!armed(del,'l'+id))return;
   const d=docs.find(x=>x.id===id);if(!d)return;d.ids.forEach(dropPage);docs=docs.filter(x=>x.id!==id);IDB.set('docs',docs);
-  if(id===S.docId)newDoc();openLib();toast('המסמך נמחק');});
+  if(id===S.docId)newDoc();openLib();toast('המסמך נמחק מהטלפון');});
 
 /* ---------- save / share ---------- */
 let saveJob=null,saveFmt=ls.get('scan-fmt')||'pdf',prepared=null;
@@ -924,7 +1075,7 @@ $('#editRot').onclick=()=>{if(S.editing.busy)return;S.editing.rot=(S.editing.rot
 $('#editCrop').onclick=()=>{if(!S.editing.busy)openCrop(S.editing);};
 $('#editRetake').onclick=()=>{if(S.editing.busy)return;S.retake=S.editing;$('#editScreen').hidden=true;openCam();};
 $('#editJpg').onclick=()=>{const pg=S.editing;if(!pg.blob||pg.dirty)return;openSaveAs(fname()+' עמוד '+(S.pages.indexOf(pg)+1),{ext:'jpg',make:async()=>pg.blob});};
-$('#editDone').onclick=()=>{if(S.editing)S.editing.isNew=false;$('#editScreen').hidden=true;S.editing=null;renderHome();};
+$('#editDone').onclick=()=>{scheduleSync(800);if(S.editing)S.editing.isNew=false;$('#editScreen').hidden=true;S.editing=null;renderHome();};
 let delArm=0;
 $('#editDelete').onclick=()=>{const b=$('#editDelete');
   if(Date.now()-delArm>3000){delArm=Date.now();b.textContent='לחץ שוב';setTimeout(()=>b.textContent='מחק',3000);return;}
