@@ -189,7 +189,19 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 .lib li.sec{border:0;padding:14px 0 2px;font-size:13px;font-weight:800;color:var(--muted)}
 .lib .lt.pdf{display:grid;place-items:center;font-size:11px;font-weight:800;color:var(--danger)}
 .lib .wait{color:#B7791F;font-weight:700}
-.viewer{flex:1;min-height:0;overflow:auto;padding:12px 14px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
+.vwrap{flex:1;min-height:0;position:relative;display:flex}
+.viewer{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;display:flex;flex-direction:row;scroll-snap-type:x mandatory;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior-x:contain}
+.viewer::-webkit-scrollbar{display:none}
+.viewer figure{flex:0 0 100%;width:100%;max-width:none;height:100%;margin:0;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;padding:10px 14px;position:relative}
+.viewer figure img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+.viewer figure .spin{position:absolute}
+.viewer figure .fail{color:#C9D1D9;text-align:center;max-width:28ch}
+.varrow{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;display:grid;place-items:center;backdrop-filter:blur(6px)}
+.varrow svg{width:22px;height:22px}
+.varrow.prev{right:8px}.varrow.next{left:8px}
+.varrow:disabled{opacity:0;pointer-events:none}
+.vcount{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-weight:700;font-size:14px;padding:4px 12px;border-radius:999px;font-variant-numeric:tabular-nums}
+@media (hover:none){.varrow{display:none}}
 .viewer figure{margin:0;width:100%;max-width:900px}
 .viewer img{display:block;width:100%;height:auto;background:#fff;box-shadow:0 0 0 1px #2A323B}
 .viewer figcaption{margin-top:4px;text-align:center;font-size:13px;color:#9AA6B2}
@@ -473,7 +485,10 @@ main{padding-bottom:150px}
 
 <section class="screen" id="viewScreen" hidden>
   <div class="bar"><button class="ghost" id="viewClose">סגור</button><h2 id="viewTitle"></h2><span style="width:56px"></span></div>
-  <div class="viewer" id="viewBody"></div>
+  <div class="vwrap"><div class="viewer" id="viewBody"></div>
+    <button class="varrow prev" id="viewPrev" aria-label="התמונה הקודמת" hidden><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button class="varrow next" id="viewNext" aria-label="התמונה הבאה" hidden><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <span class="vcount" id="viewCount" hidden></span></div>
   <div class="tools"><div class="row"><button class="btn" id="viewDl">הורד לטלפון</button><button class="btn primary" id="viewShare">שתף</button></div></div>
 </section>
 
@@ -484,7 +499,7 @@ main{padding-bottom:150px}
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 13 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 14 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><button type="button" class="linkbtn" id="selClear">בטל בחירה</button></div>
       <label class="check" style="margin-top:6px"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label>
@@ -1167,40 +1182,80 @@ $('#libList').addEventListener('click',async e=>{
   const l=d.loc||(d.path&&{path:d.path});if(DBX.tok&&l&&l.path.toLowerCase().startsWith(DBX.root.toLowerCase()+'/')){try{await dbxCall('files/delete_v2',{path:l.path});}catch(_){}}
   if(id===S.docId)newDoc();openLib();toast(DBX.tok?'המסמך נמחק':'המסמך נמחק מהטלפון');});
 
-/* ---------- viewer ---------- */
-const view={item:null,files:[],urls:[]};
+/* ---------- viewer: swipe between pages, or between the images in the list ---------- */
+const view={item:null,slides:[],idx:0,token:0};
+const IMG_RE=/\.(jpe?g|png|webp|gif)$/i;
 function pdfJpegs(buf){
   const u=new Uint8Array(buf),t=new TextDecoder('latin1').decode(u),re=/\/DCTDecode[^>]*?\/Length\s+(\d+)[^>]*>>\s*stream\r?\n/g,out=[];let m;
   while((m=re.exec(t))){const st=m.index+m[0].length,len=+m[1];out.push(new Blob([u.slice(st,st+len)],{type:'image/jpeg'}));re.lastIndex=st+len;}
   return out;}
+function clearSlides(){view.slides.forEach(sl=>sl.url&&URL.revokeObjectURL(sl.url));view.slides=[];}
+function buildSlides(n){const body=$('#viewBody');body.innerHTML='';
+  for(let i=0;i<n;i++){const fig=document.createElement('figure');fig.dataset.i=i;fig.innerHTML='<span class="spin"></span>';body.appendChild(fig);}}
+function showSlide(i){const sl=view.slides[i],fig=$('#viewBody').children[i];if(!sl||!fig||!sl.url||fig.dataset.done)return;
+  fig.dataset.done='1';fig.innerHTML='';const im=document.createElement('img');im.src=sl.url;im.alt=sl.name;fig.appendChild(im);}
+function failSlide(i,msg){const fig=$('#viewBody').children[i];if(fig){fig.dataset.done='1';fig.innerHTML='<div class="fail">'+msg+'</div>';}}
+async function loadSlide(i){const sl=view.slides[i],tk=view.token;if(!sl||sl.url||sl.loading||!sl.path)return;
+  sl.loading=true;
+  try{const b=await dbxGet(sl.path);if(tk!==view.token)return;
+    sl.blob=new Blob([b],{type:/\.png$/i.test(sl.name)?'image/png':/\.webp$/i.test(sl.name)?'image/webp':/\.gif$/i.test(sl.name)?'image/gif':'image/jpeg'});
+    sl.url=URL.createObjectURL(sl.blob);showSlide(i);}
+  catch(e){if(tk===view.token)failSlide(i,e&&e.code==='net'?'אין חיבור לאינטרנט.':'לא הצלחתי לטעון את התמונה.');}
+  sl.loading=false;}
+function slideIndex(){const b=$('#viewBody'),w=b.clientWidth||1;return Math.max(0,Math.min(view.slides.length-1,Math.round(Math.abs(b.scrollLeft)/w)));}
+function goSlide(i,smooth){const b=$('#viewBody'),f=b.children[i];if(!f)return;
+  f.scrollIntoView({behavior:smooth&&!matchMedia('(prefers-reduced-motion: reduce)').matches?'smooth':'auto',inline:'center',block:'nearest'});
+  onSlide(i);}
+function onSlide(i){view.idx=i;const n=view.slides.length,sl=view.slides[i];
+  $('#viewCount').hidden=n<2;$('#viewCount').textContent=(i+1)+' / '+n;
+  $('#viewPrev').hidden=$('#viewNext').hidden=n<2;$('#viewPrev').disabled=i<=0;$('#viewNext').disabled=i>=n-1;
+  if(view.mode==='list'&&sl)$('#viewTitle').textContent=sl.name;
+  [i,i+1,i-1,i+2].forEach(k=>{if(view.slides[k])view.slides[k].path?loadSlide(k):showSlide(k);});}
+let vsT=0;$('#viewBody').addEventListener('scroll',()=>{clearTimeout(vsT);vsT=setTimeout(()=>{const i=slideIndex();if(i!==view.idx)onSlide(i);},60);},{passive:true});
+$('#viewPrev').onclick=()=>goSlide(view.idx-1,true);
+$('#viewNext').onclick=()=>goSlide(view.idx+1,true);
+document.addEventListener('keydown',e=>{if($('#viewScreen').hidden)return;
+  if(e.key==='ArrowLeft')goSlide(view.idx+(document.dir==='rtl'||document.documentElement.dir==='rtl'?1:-1),true);
+  else if(e.key==='ArrowRight')goSlide(view.idx+(document.documentElement.dir==='rtl'?-1:1),true);});
 async function openViewer(f){
-  view.item=f;view.files=[];view.urls.forEach(URL.revokeObjectURL);view.urls=[];
-  $('#viewTitle').textContent=f.name;
-  const body=$('#viewBody');body.innerHTML='<div class="vmsg"><span class="spin" style="position:static;display:block;margin:0 auto 12px"></span>טוען מ־Dropbox…</div>';
-  $('#viewScreen').hidden=false;
+  view.token++;const tk=view.token;view.item=f;clearSlides();
+  $('#viewScreen').hidden=false;$('#viewTitle').textContent=f.name;
+  const body=$('#viewBody');
+  if(f['.tag']!=='folder'&&IMG_RE.test(f.name)){
+    /* a single image: swipe through every image in the same list */
+    view.mode='list';
+    const imgs=dbxFiles.filter(x=>x['.tag']!=='folder'&&IMG_RE.test(x.name));
+    view.slides=imgs.map(x=>({name:x.name,path:x.path_lower}));
+    buildSlides(view.slides.length);
+    const start=Math.max(0,imgs.findIndex(x=>x.path_lower===f.path_lower));
+    requestAnimationFrame(()=>goSlide(start,false));
+    return;}
+  /* a PDF or a folder: swipe through its pages */
+  view.mode='doc';
+  body.innerHTML='<figure><div class="fail"><span class="spin" style="position:static;display:block;margin:0 auto 12px"></span>טוען מ־Dropbox…</div></figure>';
+  $('#viewCount').hidden=true;$('#viewPrev').hidden=$('#viewNext').hidden=true;
   try{
-    const fl=await dbxItemFiles(f);if(view.item!==f)return;view.files=fl;
+    const fl=await dbxItemFiles(f);if(tk!==view.token)return;view.files=fl;
     const imgs=[];
     for(const x of fl){
-      if(/\.(jpe?g|png|webp|gif)$/i.test(x.name))imgs.push(x.blob);
-      else if(/\.pdf$/i.test(x.name)){const j=pdfJpegs(await x.blob.arrayBuffer());if(!j.length)throw{code:'fmt'};imgs.push(...j);}}
+      if(IMG_RE.test(x.name))imgs.push({name:x.name,blob:x.blob});
+      else if(/\.pdf$/i.test(x.name)){const j=pdfJpegs(await x.blob.arrayBuffer());j.forEach((b,k)=>imgs.push({name:x.name+(j.length>1?' · '+(k+1):''),blob:b}));}}
     if(!imgs.length)throw{code:'fmt'};
-    body.innerHTML='';
-    imgs.forEach((b,i)=>{const u=URL.createObjectURL(b);view.urls.push(u);
-      const fig=document.createElement('figure'),im=document.createElement('img');im.src=u;im.alt='עמוד '+(i+1);im.loading='lazy';fig.appendChild(im);
-      if(imgs.length>1){const c=document.createElement('figcaption');c.textContent='עמוד '+(i+1)+' מתוך '+imgs.length;fig.appendChild(c);}
-      body.appendChild(fig);});
-    body.scrollTop=0;}
-  catch(e){if(view.item!==f)return;
-    body.innerHTML='<div class="vmsg">'+(e&&e.code==='net'?'אין חיבור לאינטרנט. התצוגה תעבוד כשהחיבור יחזור.':e&&e.code==='fmt'?'אי אפשר להציג את הקובץ הזה כאן. אפשר להוריד אותו ולפתוח באפליקציה אחרת.':'לא הצלחתי לטעון את המסמך מ־Dropbox.')+'</div>';}}
-function closeViewer(){$('#viewScreen').hidden=true;view.item=null;view.urls.forEach(URL.revokeObjectURL);view.urls=[];$('#viewBody').innerHTML='';}
+    view.slides=imgs.map(x=>({name:x.name,blob:x.blob,url:URL.createObjectURL(x.blob)}));
+    buildSlides(view.slides.length);requestAnimationFrame(()=>goSlide(0,false));}
+  catch(e){if(tk!==view.token)return;
+    body.innerHTML='<figure><div class="fail">'+(e&&e.code==='net'?'אין חיבור לאינטרנט. התצוגה תעבוד כשהחיבור יחזור.':e&&e.code==='fmt'?'אי אפשר להציג את הקובץ הזה כאן. אפשר להוריד אותו ולפתוח באפליקציה אחרת.':'לא הצלחתי לטעון את המסמך מ־Dropbox.')+'</div></figure>';}}
+function closeViewer(){view.token++;$('#viewScreen').hidden=true;view.item=null;clearSlides();$('#viewBody').innerHTML='';}
 $('#viewClose').onclick=closeViewer;
-$('#viewDl').onclick=async()=>{const f=view.item,fl=view.files;if(!f||!fl.length)return;
+async function viewFilesNow(){
+  if(view.mode==='list'){const sl=view.slides[view.idx];if(!sl)return[];if(!sl.blob){await loadSlide(view.idx);}return sl.blob?[{name:sl.name,blob:sl.blob}]:[];}
+  return view.files||[];}
+$('#viewDl').onclick=async()=>{const f=view.item;if(!f)return;const fl=await viewFilesNow();if(!fl.length)return;
   if(fl.length===1)download(fl[0].name,fl[0].blob);else download(f.name+'.zip',await buildZip(fl));
   toast('הורד לטלפון: '+(fl.length===1?fl[0].name:f.name+'.zip'));};
-$('#viewShare').onclick=async()=>{const fl=view.files;if(!fl.length)return;
+$('#viewShare').onclick=async()=>{const fl=await viewFilesNow();if(!fl.length)return;
   if(!canShareFiles){$('#viewDl').click();return;}
-  try{await navigator.share({files:fl.map(x=>new File([x.blob],x.name,{type:x.blob.type||(/\.pdf$/i.test(x.name)?'application/pdf':'image/jpeg')})),title:$('#viewTitle').textContent});}
+  try{await navigator.share({files:fl.map(x=>new File([x.blob],x.name,{type:x.blob.type||(/\.pdf$/i.test(x.name)?'application/pdf':'image/jpeg')})),title:fl.length===1?fl[0].name:$('#viewTitle').textContent});}
   catch(err){if(err&&err.name!=='AbortError')toast('השיתוף לא הצליח. נסה ״הורד לטלפון״.');}};
 
 /* ---------- save / share ---------- */
