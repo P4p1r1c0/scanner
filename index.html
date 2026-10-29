@@ -379,7 +379,7 @@ let restoring=true;
 function saveDoc(){if(restoring)return;
   const e={id:S.docId,name:$('#docName').value.trim()||today(),preset:S.preset,ids:S.pages.map(p=>p.id),cover:S.pages[0]?S.pages[0].id:null,updated:Date.now()};
   const i=docs.findIndex(d=>d.id===S.docId);
-  if(i>=0){const o=docs[i];e.path=o.path;e.sig=o.sig;e.synced=o.synced;docs[i]=e;}else docs.unshift(e);
+  if(i>=0){const o=docs[i];e.path=o.path;e.loc=o.loc;e.sig=o.sig;e.synced=o.synced;docs[i]=e;}else docs.unshift(e);
   docs.sort((a,b)=>b.updated-a.updated);
   IDB.set('docs',docs);IDB.set('cur',S.docId);IDB.set('uid',uid);scheduleSync();}
 async function putSrc(pg){try{await IDB.set('s:'+pg.id,await pg.srcBlob.arrayBuffer());}catch(_){}}
@@ -779,16 +779,25 @@ async function dbxCall(ep,body,o){o=o||{};
 async function dbxList(){
   let j=await dbxCall('files/list_folder',{path:'',recursive:false});let all=j.entries;
   while(j.has_more){j=await dbxCall('files/list_folder/continue',{cursor:j.cursor});all=all.concat(j.entries);}
-  dbxFiles=all.filter(e=>e['.tag']==='file').sort((a,b)=>(b.server_modified||'').localeCompare(a.server_modified||''));dbxListed=true;
+  const fo=all.filter(e=>e['.tag']==='folder').sort((a,b)=>a.name.localeCompare(b.name,'he'));
+  const fi=all.filter(e=>e['.tag']==='file').sort((a,b)=>(b.server_modified||'').localeCompare(a.server_modified||''));
+  dbxFiles=fo.concat(fi);dbxListed=true;
   return dbxFiles;}
 const dbxGet=path=>dbxCall('files/download',null,{content:true,arg:{path},raw:true});
+async function dbxItemFiles(f){
+  if(f['.tag']!=='folder')return[{name:f.name,blob:await dbxGet(f.path_lower)}];
+  let j=await dbxCall('files/list_folder',{path:f.path_lower});let all=j.entries;
+  while(j.has_more){j=await dbxCall('files/list_folder/continue',{cursor:j.cursor});all=all.concat(j.entries);}
+  const out=[];for(const e of all.filter(e=>e['.tag']==='file').sort((a,b)=>a.name.localeCompare(b.name,'he',{numeric:true})))out.push({name:e.name,blob:await dbxGet(e.path_lower)});
+  return out;}
 
 /* sync: every document goes up as one PDF; once it is not the open document, the phone copy is removed */
 let syncing=false,syncT=0,syncSt='';
 function safeName(n){return (n||'מסמך').replace(/[\\/:*?"<>|]+/g,'-').replace(/\s+/g,' ').trim()||'מסמך';}
 function sigOf(d){
-  if(d.id===S.docId)return safeName($('#docName').value.trim()||today())+'|'+S.preset+'|'+S.pages.map(p=>[p.id,p.filter,p.rot,p.sv||0,(p.corners||[]).map(c=>Math.round(c.x)+','+Math.round(c.y)).join(';')].join(':')).join('/');
+  if(d.id===S.docId)return safeName($('#docName').value.trim()||today())+'|'+S.preset+'|'+S.pages.map(p=>[p.id,p.filter,p.rot,p.sv||0,(p.corners||[]).map(c=>Math.round(c.x)+','+Math.round(c.y)).join(';')].join(':')).join('/')+'|'+fmtKey(S.pages.length);
   return d.sig0||('x'+d.updated);}
+function fmtKey(N){const f=ls.get('scan-fmt')||'pdf';return N>1?f:(f==='jpgs'?'jpgs':'pdf');}
 function scheduleSync(ms){if(!DBX.tok)return;clearTimeout(syncT);syncT=setTimeout(syncAll,ms==null?4000:ms);}
 function pendingCount(){return docs.filter(d=>d.ids.length&&d.sig!==sigOf(d)).length;}
 function setSync(st){syncSt=st;const c=$('#syncChip');
@@ -796,6 +805,39 @@ function setSync(st){syncSt=st;const c=$('#syncChip');
   else{c.hidden=false;c.classList.toggle('err',st==='err');
     c.textContent=st==='up'?'מעלה ל־Dropbox…':st==='wait'?'ממתין לאינטרנט':st==='err'?'לא הועלה, אנסה שוב':pendingCount()?'ממתין להעלאה':'שמור ב־Dropbox';}
   if(!$('#libBg').hidden)renderDbxBox();}
+async function docFiles(d,cur,fmt){
+  const name=safeName(cur?($('#docName').value.trim()||today()):d.name);
+  let pages;
+  if(cur){await processAllDirty();pages=S.pages.slice();}
+  else{pages=[];for(const id of d.ids){const p=await storedPage(id,d.preset);if(p)pages.push(p);}}
+  const N=pages.length;if(!N)return null;
+  if(N===1)return{name,files:[fmt==='jpgs'?{name:name+'.jpg',blob:pages[0].blob}:{name:name+'.pdf',blob:await buildPdf(pages)}]};
+  if(fmt==='pdf')return{name,files:[{name:name+'.pdf',blob:await buildPdf(pages)}]};
+  const files=[];
+  for(let i=0;i<N;i++)files.push({name:partName(name,i+1,N)+'.'+(fmt==='jpgs'?'jpg':'pdf'),blob:fmt==='jpgs'?pages[i].blob:await buildPdf([pages[i]])});
+  return{name,files,folder:true};}
+async function dbxExists(path){try{await dbxCall('files/get_metadata',{path});return true;}catch(e){if(e&&e.code==='api'&&e.status===409)return false;throw e;}}
+async function uploadDoc(d,cur,sig){
+  if(d.path&&!d.loc)d.loc={type:'file',path:d.path};
+  const fmt=sig.split('|').pop(),out=await docFiles(d,cur,fmt);if(!out)return false;
+  const old=d.loc,up=(path,blob,mode)=>dbxCall('files/upload',null,{content:true,blob,arg:{path,mode,autorename:mode==='add',mute:true}});
+  if(!out.folder){
+    const f=out.files[0],want='/'+f.name;let res;
+    if(old&&old.type==='file'&&old.path.toLowerCase()===want.toLowerCase())res=await up(old.path,f.blob,'overwrite');
+    else res=await up(want,f.blob,'add');
+    d.loc={type:'file',path:res.path_display};}
+  else{
+    let folder;
+    if(old&&old.type==='folder'&&old.base===out.name)folder=old.path;
+    else{let i=1;folder='/'+out.name;while(await dbxExists(folder))folder='/'+out.name+' ('+(++i)+')';}
+    for(const f of out.files)await up(folder+'/'+f.name,f.blob,'overwrite');
+    if(old&&old.type==='folder'&&old.path===folder){
+      const keep=new Set(out.files.map(f=>f.name.toLowerCase()));
+      try{const j=await dbxCall('files/list_folder',{path:folder});
+        for(const e of j.entries)if(!keep.has(e.name.toLowerCase())){try{await dbxCall('files/delete_v2',{path:e.path_lower});}catch(_){}}}catch(_){}}
+    d.loc={type:'folder',path:folder,base:out.name};}
+  if(old&&old.path.toLowerCase()!==d.loc.path.toLowerCase()){try{await dbxCall('files/delete_v2',{path:old.path});}catch(_){}}
+  d.path=null;return true;}
 async function syncAll(){
   if(!DBX.tok||syncing)return;
   if(!navigator.onLine){setSync('wait');return;}
@@ -808,13 +850,8 @@ async function syncAll(){
       const sig=sigOf(d);
       if(d.sig!==sig){
         setSync('up');
-        const blob=await docPdf(d);if(!blob)continue;
-        const want='/'+safeName(cur?($('#docName').value.trim()||today()):d.name)+'.pdf';
-        let res;
-        if(d.path&&d.path.toLowerCase()===want.toLowerCase())res=await dbxCall('files/upload',null,{content:true,blob,arg:{path:d.path,mode:'overwrite',mute:true}});
-        else{res=await dbxCall('files/upload',null,{content:true,blob,arg:{path:want,mode:'add',autorename:true,mute:true}});
-          if(d.path){try{await dbxCall('files/delete_v2',{path:d.path});}catch(_){}}}
-        d.path=res.path_display;d.sig=sig;d.synced=Date.now();n++;IDB.set('docs',docs);}
+        if(!(await uploadDoc(d,cur,sig)))continue;
+        d.sig=sig;d.synced=Date.now();n++;IDB.set('docs',docs);}
       if(!cur&&d.sig===sigOf(d)){d.ids.forEach(dropPage);docs=docs.filter(x=>x!==d);IDB.set('docs',docs);removed++;}}
   }catch(e){fail=true;}
   syncing=false;
@@ -840,7 +877,7 @@ function localRow(d){
   const ex=!DBX.tok&&cleanOn()&&d.id!==S.docId&&daysLeft(d)<=10?' · <span class="exp">יימחק בעוד '+Math.max(1,daysLeft(d))+' ימים</span>':'';
   return `<li><label class="pick"><input type="checkbox" data-pick="l:${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln" data-name="l:${d.id}"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${fmtDate(d.updated)}${st}${up}${ex}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}
 function dbxRow(f,i){
-  return `<li><label class="pick"><input type="checkbox" data-pick="d:${i}" aria-label="בחר מסמך"></label><button class="open" data-dl="${i}"><span class="lt pdf">PDF</span><span style="min-width:0"><span class="ln" data-name="d:${i}"></span><span class="ls">${fmtDate(Date.parse(f.server_modified))} · ${fmt(f.size)}</span></span></button><button class="del" data-ddel="${i}">מחק</button></li>`;}
+  return `<li><label class="pick"><input type="checkbox" data-pick="d:${i}" aria-label="בחר מסמך"></label><button class="open" data-dl="${i}"><span class="lt pdf">${f['.tag']==='folder'?'תיקייה':/\.jpe?g$/i.test(f.name)?'JPG':'PDF'}</span><span style="min-width:0"><span class="ln" data-name="d:${i}"></span><span class="ls">${f['.tag']==='folder'?'תיקייה עם קובץ לכל עמוד':fmtDate(Date.parse(f.server_modified))+' · '+fmt(f.size)}</span></span></button><button class="del" data-ddel="${i}">מחק</button></li>`;}
 async function openLib(keep){
   saveDoc();const list=$('#libList');libUrls.forEach(u=>URL.revokeObjectURL(u));libUrls.length=0;
   renderDbxBox();$('#cleanRow').hidden=!!DBX.tok;
@@ -860,10 +897,10 @@ async function openLib(keep){
   if(DBX.tok){
     let files;try{files=await dbxList();}catch(e){const l=$('#dbxLoading');if(l)l.innerHTML='<p class="libempty">'+(e&&e.code==='net'?'אין חיבור לאינטרנט. הרשימה מ־Dropbox תופיע כשיחזור.':'לא הצלחתי לטעון את הרשימה מ־Dropbox.')+'</p>';return;}
     const l=$('#dbxLoading');if(!l)return;
-    const curPath=cd&&cd.path&&cd.sig===sigOf(cd)?cd.path.toLowerCase():'';
+    const cl=cd&&(cd.loc||(cd.path&&{path:cd.path})),curPath=cl&&cd.sig===sigOf(cd)?cl.path.toLowerCase():'';
     const rows=files.map((f,i)=>f.path_lower===curPath?'':dbxRow(f,i)).join('');
     l.outerHTML=rows||'<li><p class="libempty">עוד אין מסמכים ב־Dropbox.</p></li>';
-    list.querySelectorAll('[data-name^="d:"]').forEach(el=>{el.textContent=dbxFiles[+el.dataset.name.slice(2)].name.replace(/\.pdf$/i,'');});
+    list.querySelectorAll('[data-name^="d:"]').forEach(el=>{el.textContent=dbxFiles[+el.dataset.name.slice(2)].name.replace(/\.(pdf|jpe?g)$/i,'');});
     updateSel();}}
 $('#cleanChk').checked=cleanOn();
 $('#cleanChk').addEventListener('change',()=>{ls.set('scan-clean',$('#cleanChk').checked?'1':'0');
@@ -903,10 +940,11 @@ async function docPdf(d){
 async function prepareSel(){
   const key=[...libSel].sort().join(',');if(selPrepared&&selPrepared.key===key)return selPrepared.files;
   const used=new Set(),files=[];
-  const add=(base,blob)=>{let n=base,i=2;while(used.has(n))n=base+' ('+(i++)+')';used.add(n);files.push({name:n+'.pdf',blob});};
+  const addRaw=(fname,blob)=>{const m=fname.match(/^(.*?)(\.[^.]+)?$/),base=m[1],ext=m[2]||'';let n=base,i=2;while(used.has((n+ext).toLowerCase()))n=base+' ('+(i++)+')';used.add((n+ext).toLowerCase());files.push({name:n+ext,blob});};
+  const add=(base,blob)=>addRaw(base+'.pdf',blob);
   for(const k of libSel){
     if(k.startsWith('l:')){const d=docs.find(x=>x.id===+k.slice(2));if(!d)continue;const blob=await docPdf(d);if(blob)add(safeName(d.id===S.docId?$('#docName').value:d.name),blob);}
-    else{const f=dbxFiles[+k.slice(2)];if(!f)continue;add(f.name.replace(/\.pdf$/i,''),await dbxGet(f.path_lower));}}
+    else{const f=dbxFiles[+k.slice(2)];if(!f)continue;for(const x of await dbxItemFiles(f))addRaw(x.name,x.blob);}}
   selPrepared={key,files};return files;}
 function zipName(){const d=new Date();return 'מסמכים '+d.getDate()+'-'+(d.getMonth()+1)+'-'+d.getFullYear()+'.zip';}
 $('#selDl').onclick=async()=>{if(!libSel.size)return;const b=$('#selDl');b.disabled=true;b.textContent='מכין…';
@@ -933,11 +971,13 @@ $('#libList').addEventListener('click',async e=>{
   if(o){const d=docs.find(x=>x.id===+o.dataset.doc);closeLib();if(d&&d.id!==S.docId){await loadDoc(d);toast('נפתח: '+d.name);}return;}
   const g=e.target.closest('[data-dl]');
   if(g){const f=dbxFiles[+g.dataset.dl];if(!f)return;toast('מוריד מ־Dropbox…',8000);
-    try{download(f.name,await dbxGet(f.path_lower));toast('הורד: '+f.name);}catch(err){toast(err&&err.code==='net'?'אין חיבור לאינטרנט.':'ההורדה נכשלה.');}return;}
+    try{const fl=await dbxItemFiles(f);if(!fl.length)throw 0;
+      if(fl.length===1)download(fl[0].name,fl[0].blob);else download(f.name+'.zip',await buildZip(fl));
+      toast('הורד: '+(fl.length===1?fl[0].name:f.name+'.zip'));}catch(err){toast(err&&err.code==='net'?'אין חיבור לאינטרנט.':'ההורדה נכשלה.');}return;}
   const dd=e.target.closest('[data-ddel]');
   if(dd){const f=dbxFiles[+dd.dataset.ddel];if(!f||!armed(dd,'d'+f.path_lower))return;
     try{await dbxCall('files/delete_v2',{path:f.path_lower});
-      docs.forEach(d=>{if(d.path&&d.path.toLowerCase()===f.path_lower){d.path=null;d.sig=null;}});
+      docs.forEach(d=>{const l=d.loc||(d.path&&{path:d.path});if(l&&l.path.toLowerCase()===f.path_lower){d.path=null;d.loc=null;d.sig=null;}});
       toast('נמחק מ־Dropbox. אפשר לשחזר אותו מ״קבצים שנמחקו״ ב־Dropbox.',5000);openLib();}
     catch(err){toast('המחיקה נכשלה. נסה שוב.');}return;}
   const del=e.target.closest('[data-del]');if(!del)return;const id=+del.dataset.del;
@@ -965,8 +1005,9 @@ function updateFmt(){
   document.querySelectorAll('#fmtSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.fmt===saveFmt));
   $('#zipRow').hidden=!multi;$('#saveExt').textContent='.'+ext;
   const n=cleanName()||'…',np=$('#namesPreview');np.hidden=!multi;
-  np.textContent=multi?N+' קבצים: '+partName(n,1,N)+'.'+ext+', '+partName(n,2,N)+'.'+ext+(N>2?' וכן הלאה':''):'';}
-$('#fmtSeg').addEventListener('click',e=>{const b=e.target.closest('[data-fmt]');if(!b)return;saveFmt=b.dataset.fmt;ls.set('scan-fmt',saveFmt);updateFmt();});
+  np.textContent=multi?N+' קבצים: '+partName(n,1,N)+'.'+ext+', '+partName(n,2,N)+'.'+ext+(N>2?' וכן הלאה':'')+(DBX.tok?'. ב־Dropbox הם יישמרו בתיקייה בשם המסמך.':''):'';
+  if(DBX.tok&&saveJob.formats){np.hidden=false;if(!multi)np.textContent='גם ב־Dropbox המסמך יישמר כ־'+(ext==='jpg'?'JPG':'PDF')+'.';}}
+$('#fmtSeg').addEventListener('click',e=>{const b=e.target.closest('[data-fmt]');if(!b)return;saveFmt=b.dataset.fmt;ls.set('scan-fmt',saveFmt);updateFmt();scheduleSync(1500);});
 $('#zipChk').addEventListener('change',()=>ls.set('scan-zip',$('#zipChk').checked?'1':'0'));
 $('#saveName').addEventListener('input',updateFmt);
 function recent(){try{return JSON.parse(ls.get('scan-recent-names')||'[]');}catch(_){return [];}}
