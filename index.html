@@ -219,28 +219,152 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 .cam-open .toast{background:#fff;color:#111;bottom:calc(170px + env(safe-area-inset-bottom,0px))}
 .toast.on{opacity:1}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ===== visual refresh: scanner corners on a calm desk ===== */
+:root{
+  --bg:#EEF2F6;--sheet:#FFFFFF;--text:#15202C;--muted:#677487;--line:#DFE5EC;
+  --ink:#1C4C86;--ink-2:#2F6FB8;--ink-text:#FFFFFF;--mark:#FFC83D;--danger:#C2392E;
+  --soft:#E7EEF7;--card-shadow:0 1px 2px rgba(17,34,60,.06),0 8px 22px rgba(17,34,60,.08);
+  --lift:0 10px 30px rgba(17,34,60,.16);--r:16px;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0D1218;--sheet:#17202A;--text:#E7ECF2;--muted:#94A1B2;--line:#25303C;
+  --ink:#86B6EE;--ink-2:#A9CCF5;--ink-text:#0A1522;--soft:#1D2834;--danger:#F08A80;
+  --card-shadow:0 1px 2px rgba(0,0,0,.45),0 8px 22px rgba(0,0,0,.35);--lift:0 12px 34px rgba(0,0,0,.5);color-scheme:dark}}
+body{font-size:16.5px;background:radial-gradient(1200px 500px at 100% -10%,var(--soft),transparent 60%),var(--bg);background-attachment:fixed}
+svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+button{transition:transform .12s ease,background-color .15s ease,box-shadow .15s ease}
+button:active:not(:disabled){transform:scale(.97)}
+@media (prefers-reduced-motion:reduce){button{transition:none}button:active:not(:disabled){transform:none}}
+
+/* header */
+header{background:transparent;padding-top:14px;padding-bottom:6px}
+body::before{background:var(--bg)}
+.brand{gap:8px;font-size:15px}
+.brand .logo{width:34px;height:34px;border-radius:10px;box-shadow:var(--card-shadow);flex:0 0 auto}
+.brand #count{font-weight:800;font-size:17px;color:var(--text)}
+.hbtn{display:inline-flex;align-items:center;gap:6px;background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:14px;box-shadow:var(--card-shadow)}
+.hbtn svg{width:18px;height:18px;color:var(--ink)}
+.hbtn.icon{padding:8px;width:38px;height:38px;justify-content:center}
+.hbtn.install{box-shadow:none}
+.sync{background:var(--soft);border:0;color:var(--ink);padding:4px 10px}
+.sync.err{background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.namecard{margin-top:12px;background:var(--sheet);border-radius:var(--r);padding:10px 14px 6px;box-shadow:var(--card-shadow)}
+.namecard label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.docname{margin-top:0;border-bottom:0;font-size:24px;padding:2px 0 4px}
+.namecard:focus-within{box-shadow:0 0 0 2px var(--ink),var(--card-shadow)}
+
+/* empty state */
+.empty{margin-top:6vh}
+.empty .sheetart{width:112px;height:146px;border:0;border-radius:6px;box-shadow:var(--lift);transform:rotate(-5deg);animation:float 5s ease-in-out infinite}
+@keyframes float{50%{transform:rotate(-3deg) translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.empty .sheetart{animation:none}}
+.empty .sheetart i{border-color:var(--mark);border-radius:3px}
+.empty .sheetart b{border-radius:3px;background:var(--soft)}
+.empty h2{font-size:26px;font-weight:800;margin-top:6px}
+.empty .lead{max-width:30ch}
+.steps{list-style:none;padding:0;margin:22px auto 0;max-width:420px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;counter-reset:s}
+.steps li{background:var(--sheet);border-radius:14px;padding:14px 8px 12px;box-shadow:var(--card-shadow);counter-increment:s;display:flex;flex-direction:column;align-items:center;gap:2px}
+.steps li::before{content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--mark);color:#1A1A1A;font-weight:800;display:grid;place-items:center;font-size:14px;margin-bottom:4px}
+.steps b{color:var(--text);font-size:15px}
+.steps span{font-size:13px;line-height:1.3}
+
+/* page grid */
+.grid{gap:20px 14px;margin-top:16px}
+.thumb{border:0;border-radius:12px;padding:6px;box-shadow:var(--card-shadow);background:var(--sheet)}
+.thumb img{border-radius:6px;background:#fff}
+.thumb .pnum{position:absolute;top:10px;inset-inline-start:10px;min-width:26px;height:26px;padding:0 7px;border-radius:13px;background:rgba(21,32,44,.78);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center;backdrop-filter:blur(4px)}
+.pgfoot{margin-top:8px;padding-inline:2px}
+.pgfoot .mv button{border-radius:10px;border-color:var(--line);width:36px;height:32px}
+
+/* quality */
+.quality{border:0;border-radius:var(--r);box-shadow:var(--card-shadow);padding:16px 16px 14px}
+.seg,.fseg{border:0;background:var(--soft);border-radius:12px;padding:4px;gap:4px}
+.seg button,.fseg button{border:0!important;border-radius:9px;padding:9px 4px;color:var(--muted)}
+.seg button[aria-pressed="true"],.fseg button[aria-pressed="true"]{background:var(--sheet);color:var(--ink);box-shadow:0 1px 3px rgba(17,34,60,.15)}
+
+/* dock */
+main{padding-bottom:150px}
+.dock{inset:auto max(12px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));border:0;border-radius:24px;padding:10px 18px;box-shadow:var(--lift);background:color-mix(in srgb,var(--sheet) 92%,transparent);backdrop-filter:blur(12px);max-width:560px;margin:0 auto}
+.dbtn{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;color:var(--muted);font-weight:700;font-size:13px;padding:6px 14px;border-radius:14px;min-width:72px}
+.dbtn svg{width:26px;height:26px;color:var(--ink)}
+.dbtn:disabled{opacity:.4}
+.dock .gal{justify-self:start}.dock .pdf{justify-self:end}
+.dock .pdf:not(:disabled){color:var(--ink)}
+.dock .shutter{width:74px;height:74px;margin-top:-30px;border:5px solid var(--sheet);background:var(--ink);box-shadow:0 8px 20px color-mix(in srgb,var(--ink) 45%,transparent)}
+.dock .shutter span{background:transparent;width:auto;height:auto}
+.dock .shutter svg{width:30px;height:30px;stroke:var(--ink-text)}
+
+/* buttons */
+.btn{border-radius:14px;min-height:48px}
+.btn.primary{box-shadow:0 4px 12px color-mix(in srgb,var(--ink) 30%,transparent)}
+.btn.danger{background:var(--sheet)}
+
+/* sheets */
+.sheet-bg{background:rgba(9,16,26,.45);backdrop-filter:blur(2px)}
+.sheet{border-radius:24px 24px 0 0;padding-top:10px;animation:up .22s ease-out}
+@keyframes up{from{transform:translateY(24px);opacity:.4}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+.grab{display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
+.sheet h2{font-size:22px}
+.namefield{border-radius:14px;background:var(--bg);border-color:transparent}
+.namefield:focus-within{border-color:var(--ink);background:var(--sheet)}
+.quick button{background:var(--soft);border:0;color:var(--ink);font-weight:600}
+
+/* library */
+.dbxbox{border:0;background:var(--soft);border-radius:14px}
+.lib li{border-bottom:0;background:var(--sheet);border-radius:14px;padding:8px 10px;margin:0 0 8px;box-shadow:0 0 0 1px var(--line)}
+.lib li.sel{box-shadow:0 0 0 2px var(--ink);background:color-mix(in srgb,var(--ink) 6%,var(--sheet))}
+.lib li.sec{box-shadow:none;background:none;padding:10px 2px 4px;margin:0}
+.lib li:has(.libempty){box-shadow:none;background:none}
+.lib .lt{width:46px;height:60px;border:0;border-radius:8px;box-shadow:0 0 0 1px var(--line)}
+.lib .lt.ic{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:var(--soft);box-shadow:none}
+.lib .lt.ic i{width:22px;height:22px;background:currentColor;-webkit-mask:var(--m) center/contain no-repeat;mask:var(--m) center/contain no-repeat}
+.lib .lt.ic em{font-style:normal;font-size:10px;font-weight:800}
+.k-pdf{color:#C2392E}.k-img{color:#2E8B57}.k-dir{color:var(--ink)}.k-oth{color:var(--muted)}
+.k-pdf i,.k-oth i{--m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M6 3h8l4 4v14H6z'/%3E%3Cpath d='M14 3v4h4'/%3E%3C/svg%3E")}
+.k-img i{--m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='3'/%3E%3Ccircle cx='9' cy='10' r='2'/%3E%3Cpath d='M21 16l-5-5-8 9'/%3E%3C/svg%3E")}
+.k-dir i{--m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E")}
+.lib .del{font-size:14px;border-radius:10px;padding:8px 10px}
+.selbar{border-top:0;box-shadow:0 -8px 20px rgba(17,34,60,.08);border-radius:18px 18px 0 0}
+
+/* camera + editor */
+.pill{backdrop-filter:blur(6px);border-color:rgba(255,255,255,.28);padding:9px 15px}
+.cam .shutter{width:84px;height:84px;border-width:4px}
+.cam .shutter span{width:66px;height:66px}
+.stackbtn{border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.chip{padding:10px 18px}
+.screen .bar h2{font-weight:700;color:#E3E8EE}
+.row .btn{border-radius:14px}
+#editImg{border-radius:4px}
+
+/* toast */
+.toast{border-radius:999px;padding:11px 18px;box-shadow:var(--lift);bottom:calc(122px + env(safe-area-inset-bottom,0px))}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand"><span id="count">סורק מסמכים</span><span class="sync" id="syncChip" hidden></span>
+  <div class="brand"><img class="logo" src="icon-192.png" alt=""><span id="count">סורק מסמכים</span><span class="sync" id="syncChip" hidden></span>
     <button class="hbtn install" id="installBtn" hidden>התקן</button>
-    <button class="hbtn" id="libBtn">המסמכים שלי</button>
-    <button class="hbtn" id="newBtn" hidden>חדש</button></div>
-  <label class="sr" for="docName">שם המסמך</label>
-  <input id="docName" class="docname" autocomplete="off">
+    <button class="hbtn" id="libBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span>המסמכים שלי</span></button>
+    <button class="hbtn icon" id="newBtn" hidden aria-label="מסמך חדש"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
+  <div class="namecard"><label for="docName">שם המסמך</label><input id="docName" class="docname" autocomplete="off"></div>
 </header>
 
 <main>
   <div class="empty" id="empty">
     <div class="sheetart" aria-hidden="true"><i></i><i></i><i></i><i></i><b style="top:34px"></b><b style="top:50px;left:40px"></b><b style="top:66px"></b><b style="top:82px;left:28px"></b></div>
-    <h2>צלם את העמוד הראשון</h2>
-    <p>במצב <b>רצף</b> מצלמים עמוד אחרי עמוד, ובסיום בוחרים שם לקובץ. כל עמוד נחתך לפי קצוות הדף, ואפשר לכבות את זה במצלמה.</p>
-    <p>כל המסמכים נשמרים בטלפון, גם בלי אינטרנט.</p>
+    <h2>מוכן לסריקה</h2>
+    <p class="lead">לחץ על כפתור המצלמה למטה כדי לצלם את העמוד הראשון.</p>
+    <ol class="steps">
+      <li><b>צלם</b><span>עמוד אחד, או כמה ברצף</span></li>
+      <li><b>בחר</b><span>שם, צבע ופורמט</span></li>
+      <li><b>שמור</b><span>עולה לבד ל־Dropbox</span></li>
+    </ol>
   </div>
   <ol class="grid" id="grid"></ol>
   <section class="quality" id="quality" hidden>
-    <h3>איכות וגודל קובץ</h3>
+    <h3>איכות הסריקה</h3>
     <div class="seg" role="group" aria-label="איכות">
       <button data-preset="eco">קטן</button>
       <button data-preset="std">מאוזן</button>
@@ -252,9 +376,9 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 </main>
 
 <nav class="dock">
-  <button class="btn gal" id="galBtn">גלריה</button>
+  <button class="dbtn gal" id="galBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg><span>גלריה</span></button>
   <button class="shutter" id="camBtn" aria-label="פתח מצלמה"><span><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span></button>
-  <button class="btn primary pdf" id="pdfBtn" disabled>שמור / שתף</button>
+  <button class="dbtn pdf" id="pdfBtn" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.2 4.5 4.5 0 0 0 7 18z"/><path d="M12 11v6m-2.5-2.5L12 17l2.5-2.5"/></svg><span>שמירה</span></button>
 </nav>
 <input type="file" id="camIn" accept="image/*" capture="environment" hidden>
 <input type="file" id="galIn" accept="image/*" multiple hidden>
@@ -319,7 +443,7 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 </section>
 
 <div class="sheet-bg" id="saveBg" hidden>
-  <form class="sheet" id="saveForm" role="dialog" aria-modal="true" aria-labelledby="saveTitle">
+  <form class="sheet" id="saveForm" role="dialog" aria-modal="true" aria-labelledby="saveTitle"><span class="grab" aria-hidden="true"></span>
     <h2 id="saveTitle">שמירה ושיתוף</h2>
     <label for="saveName">שם הקובץ</label>
     <div class="namefield"><input id="saveName" autocomplete="off" enterkeyhint="done"><span id="saveExt">.pdf</span></div>
@@ -354,13 +478,13 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 </section>
 
 <div class="sheet-bg" id="libBg" hidden>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle"><span class="grab" aria-hidden="true"></span>
     <div class="libhead"><h2 id="libTitle">המסמכים שלי</h2><button type="button" class="linkbtn" id="libAll" hidden>בחר הכל</button></div>
     <div class="dbxbox" id="dbxBox"></div>
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 12 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 13 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><button type="button" class="linkbtn" id="selClear">בטל בחירה</button></div>
       <label class="check" style="margin-top:6px"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label>
@@ -734,8 +858,8 @@ function renderHome(){
   $('#count').textContent=has?(S.pages.length===1?'עמוד אחד':S.pages.length+' עמודים'):'סורק מסמכים';
   $('#pdfBtn').disabled=!has;
   $('#grid').innerHTML=S.pages.map((p,i)=>`<li>
-    <button class="thumb" data-open="${i}" aria-label="ערוך עמוד ${i+1}">${p.url?`<img src="${p.url}" alt="">`:''}${p.busy||p.dirty?'<span class="spin"></span>':''}</button>
-    <div class="pgfoot"><span class="num">${i+1}</span><span>${p.blob&&!p.dirty?fmt(p.blob.size):'מעבד…'}</span>
+    <button class="thumb" data-open="${i}" aria-label="ערוך עמוד ${i+1}">${p.url?`<img src="${p.url}" alt="">`:''}${p.busy||p.dirty?'<span class="spin"></span>':''}<span class="pnum">${i+1}</span></button>
+    <div class="pgfoot"><span>${p.blob&&!p.dirty?fmt(p.blob.size):'מעבד…'}</span>
     <span class="mv"><button data-mv="${i}" data-d="-1" aria-label="הזז עמוד ${i+1} קדימה" ${i===0?'disabled':''}>→</button><button data-mv="${i}" data-d="1" aria-label="הזז עמוד ${i+1} אחורה" ${i===S.pages.length-1?'disabled':''}>←</button></span></div></li>`).join('');
   document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.preset===S.preset));
   $('#presetNote').textContent=PRESETS[S.preset].note;
@@ -920,7 +1044,7 @@ function localRow(d){
   const ex=!DBX.tok&&cleanOn()&&d.id!==S.docId&&daysLeft(d)<=10?' · <span class="exp">יימחק בעוד '+Math.max(1,daysLeft(d))+' ימים</span>':'';
   return `<li><label class="pick"><input type="checkbox" data-pick="l:${d.id}" aria-label="בחר מסמך"></label><button class="open" data-doc="${d.id}"><span class="lt" data-cover="${d.cover||''}"></span><span style="min-width:0"><span class="ln" data-name="l:${d.id}"></span><span class="ls">${d.ids.length===1?'עמוד אחד':d.ids.length+' עמודים'} · ${fmtDate(d.updated)}${st}${up}${ex}</span></span></button><button class="del" data-del="${d.id}">מחק</button></li>`;}
 function dbxRow(f,i){
-  return `<li><label class="pick"><input type="checkbox" data-pick="d:${i}" aria-label="בחר מסמך"></label><button class="open" data-dl="${i}"><span class="lt pdf">${f['.tag']==='folder'?'תיקייה':/\.(jpe?g|png|webp|gif|heic)$/i.test(f.name)?'תמונה':/\.pdf$/i.test(f.name)?'PDF':(f.name.split('.').pop()||'').toUpperCase().slice(0,4)}</span><span style="min-width:0"><span class="ln" data-name="d:${i}"></span><span class="ls">${f['.tag']==='folder'?'תיקייה':fmtDate(Date.parse(f.server_modified))+' · '+fmt(f.size)}</span></span></button><button class="del" data-ddel="${i}">מחק</button></li>`;}
+  return `<li><label class="pick"><input type="checkbox" data-pick="d:${i}" aria-label="בחר מסמך"></label><button class="open" data-dl="${i}"><span class="lt ic ${f['.tag']==='folder'?'k-dir':/\.(jpe?g|png|webp|gif|heic)$/i.test(f.name)?'k-img':/\.pdf$/i.test(f.name)?'k-pdf':'k-oth'}"><i></i><em>${f['.tag']==='folder'?'תיקייה':/\.(jpe?g|png|webp|gif|heic)$/i.test(f.name)?'תמונה':/\.pdf$/i.test(f.name)?'PDF':(f.name.split('.').pop()||'').toUpperCase().slice(0,4)}</em></span><span style="min-width:0"><span class="ln" data-name="d:${i}"></span><span class="ls">${f['.tag']==='folder'?'תיקייה':fmtDate(Date.parse(f.server_modified))+' · '+fmt(f.size)}</span></span></button><button class="del" data-ddel="${i}">מחק</button></li>`;}
 async function openLib(keep){
   saveDoc();const list=$('#libList');libUrls.forEach(u=>URL.revokeObjectURL(u));libUrls.length=0;
   renderDbxBox();$('#cleanRow').hidden=!!DBX.tok;
