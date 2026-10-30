@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>סורק לאייפון</title>
+<meta name="theme-color" content="#1C4C86">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EEF2F6;--card:#fff;--text:#15202C;--muted:#677487;--line:#DFE5EC;--ink:#1C4C86;--mark:#FFC83D;--soft:#E7EEF7;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0D1218;--card:#17202A;--text:#E7ECF2;--muted:#94A1B2;--line:#25303C;--ink:#86B6EE;--soft:#1D2834;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16.5px/1.5 "Assistant","Arial Hebrew",-apple-system,sans-serif;padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+main{max-width:520px;margin:0 auto}
+.hero{display:flex;align-items:center;gap:14px;margin:8px 0 18px}
+.hero img{width:64px;height:64px;border-radius:15px;box-shadow:0 6px 18px rgba(17,34,60,.18)}
+h1{margin:0;font-size:26px;font-weight:800;text-wrap:balance}
+.hero p{margin:0;color:var(--muted)}
+.card{background:var(--card);border-radius:18px;padding:18px;box-shadow:0 1px 2px rgba(17,34,60,.06),0 8px 22px rgba(17,34,60,.08);margin-bottom:14px}
+.card h2{margin:0 0 4px;font-size:19px}
+.tag{display:inline-block;font-size:12.5px;font-weight:800;background:var(--mark);color:#1A1A1A;border-radius:999px;padding:2px 10px;margin-bottom:8px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border-radius:14px;background:var(--ink);color:#fff;font-weight:800;font-size:17px;text-decoration:none;margin:12px 0 4px}
+@media (prefers-color-scheme:dark){.btn{color:#0A1522}}
+.btn.alt{background:var(--soft);color:var(--ink)}
+ol{margin:10px 0 0;padding-inline-start:22px}
+ol li{margin:6px 0}
+ol li::marker{font-weight:800;color:var(--ink)}
+.muted{color:var(--muted);font-size:14.5px}
+.warn{background:var(--soft);border-radius:12px;padding:10px 12px;font-size:14.5px;margin-top:10px}
+.ico{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--soft);vertical-align:-7px;margin:0 2px}
+.ico svg{width:17px;height:17px;fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#notSafari{display:none}
+</style>
+</head>
+<body>
+<main>
+  <div class="hero"><img src="apple-touch-icon.png" alt=""><div><h1>סורק מסמכים לאייפון</h1><p>אותה אפליקציה, אותם מסמכים, אותו Dropbox.</p></div></div>
+
+  <div class="card warn" id="notSafari"><b>יש לפתוח את הדף הזה ב־Safari.</b> בכרום או בתוך אפליקציה אחרת (וואטסאפ, מייל) האייפון לא מאפשר להתקין. העתק את הכתובת והדבק אותה ב־Safari.</div>
+
+  <section class="card">
+    <span class="tag">מומלץ</span>
+    <h2>הוספה למסך הבית</h2>
+    <ol>
+      <li>פתח ב־Safari את <a href="./">p4p1r1c0.github.io/scanner</a></li>
+      <li>לחץ על כפתור השיתוף <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 15V3m-4 4l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg></span> בתחתית המסך</li>
+      <li>גלול ובחר <b>״הוסף למסך הבית״</b></li>
+      <li>לחץ <b>״הוסף״</b>. האייקון של הסורק יופיע במסך הבית.</li>
+    </ol>
+    <a class="btn" href="./">פתח את האפליקציה</a>
+  </section>
+
+  <section class="card">
+    <h2>או: קובץ התקנה</h2>
+    <p class="muted">קובץ פרופיל קטן שמוסיף את אייקון הסורק למסך הבית. הוא לא מוסיף הרשאות ולא נוגע בשום דבר אחר בטלפון.</p>
+    <a class="btn alt" href="scanner-iphone.mobileconfig">הורד קובץ התקנה</a>
+    <ol>
+      <li>לחץ <b>״אפשר״</b> בחלון שנפתח</li>
+      <li>פתח <b>הגדרות</b>, ולמעלה לחץ <b>״פרופיל הורד״</b></li>
+      <li>לחץ <b>״התקן״</b>, הקש את קוד הטלפון, ושוב <b>״התקן״</b></li>
+    </ol>
+    <p class="warn">האייפון יציג ״לא מאומת״ כי הקובץ לא חתום אצל Apple. זה תקין לקובץ שהכנו בעצמנו. להסרה: הגדרות ← כללי ← ניהול VPN והתקנים.</p>
+  </section>
+
+  <section class="card">
+    <h2>בפעם הראשונה באפליקציה</h2>
+    <ol>
+      <li>אשר גישה למצלמה כשהאייפון מבקש</li>
+      <li>היכנס ל״המסמכים שלי״ ולחץ <b>״חבר ל־Dropbox״</b></li>
+    </ol>
+    <p class="muted">לאייפון יש זיכרון נפרד מאנדרואיד, ולכן צריך לחבר את Dropbox פעם אחת גם בו. המסמכים עצמם נשמרים באותה תיקייה ״תמונות״.</p>
+  </section>
+</main>
+<script>
+(function(){var ua=navigator.userAgent;var ios=/iPhone|iPad|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+var safari=/Safari/.test(ua)&&!/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|WhatsApp/.test(ua);
+if(ios&&!safari)document.getElementById('notSafari').style.display='block';})();
+</script>
+</body>
+</html>
