@@ -504,7 +504,7 @@ main{padding-bottom:150px}
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 16 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 17 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><button type="button" class="linkbtn" id="selClear">בטל בחירה</button></div>
       <label class="check" style="margin-top:6px"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label>
@@ -772,12 +772,23 @@ $('#zoomRow').addEventListener('click',e=>{const b=e.target.closest('[data-z]');
 async function setupLens(){const b=$('#camLens');b.hidden=true;cam.lenses=[];
   try{const all=await navigator.mediaDevices.enumerateDevices();
     cam.lenses=all.filter(d=>d.kind==='videoinput'&&d.label&&!/front|user|facing front|קדמי/i.test(d.label));
-    b.hidden=cam.lenses.length<2;}catch(_){}}
+    b.hidden=cam.lenses.length<2;
+    const cur=cam.track&&cam.track.getSettings?cam.track.getSettings().deviceId:'',d=cam.lenses.find(x=>x.deviceId===cur);
+    b.textContent=d?'עדשה: '+lensName(d.label):'החלף עדשה';}catch(_){}}
+/* iPhone/Android lens labels in plain Hebrew */
+function lensName(l){l=l||'';
+  if(/ultra\s*wide/i.test(l))return 'רחבה 0.5×';
+  if(/tele/i.test(l))return 'טלפוטו';
+  if(/triple/i.test(l))return 'משולבת (3)';
+  if(/dual\s*wide/i.test(l))return 'משולבת רחבה';
+  if(/dual/i.test(l))return 'משולבת';
+  if(/^back camera$/i.test(l.trim())||/camera2 0/i.test(l))return 'ראשית 1×';
+  const m=l.match(/camera2 (\d+)/i);return m?'מצלמה '+m[1]:l.replace(/back|camera|facing/ig,'').trim()||'אחורית';}
 $('#camLens').onclick=()=>{if(!cam.lenses||cam.lenses.length<2||!cam.track)return;
   const cur=cam.track.getSettings?cam.track.getSettings().deviceId:'';
   const i=cam.lenses.findIndex(d=>d.deviceId===cur),next=cam.lenses[(i+1)%cam.lenses.length];
   ls.set('scan-lens',next.deviceId);stopStream();openCam();
-  toast('עדשה '+((i+1)%cam.lenses.length+1)+' מתוך '+cam.lenses.length,1800);};
+  toast('עדשה: '+lensName(next.label),1800);};
 function camFail(msg){$('#camErr').hidden=false;$('#camErrText').textContent=msg;camHint('');}
 function stopStream(){cancelAnimationFrame(cam.raf);if(cam.stream)cam.stream.getTracks().forEach(t=>t.stop());cam.stream=null;cam.track=null;
   try{cam.wake&&cam.wake.release();}catch(_){}cam.wake=null;$('#camVideo').srcObject=null;}
