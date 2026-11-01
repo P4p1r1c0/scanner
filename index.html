@@ -504,7 +504,7 @@ main{padding-bottom:150px}
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 17 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 18 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><button type="button" class="linkbtn" id="selClear">בטל בחירה</button></div>
       <label class="check" style="margin-top:6px"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label>
@@ -1011,7 +1011,7 @@ async function dbxCall(ep,body,o){o=o||{};
     return o.raw?r.blob():r.json();}
   throw{code:'auth'};}
 async function dbxList(){
-  let j=await dbxCall('files/list_folder',{path:DBX.root,recursive:false});let all=j.entries;
+  let j;try{j=await dbxCall('files/list_folder',{path:DBX.root,recursive:false});}catch(e){if(e&&e.code==='api'&&e.status===409&&/not_found/.test(e.txt||'')){dbxFiles=[];dbxListed=true;return dbxFiles;}throw e;}let all=j.entries;
   while(j.has_more){j=await dbxCall('files/list_folder/continue',{cursor:j.cursor});all=all.concat(j.entries);}
   const fo=all.filter(e=>e['.tag']==='folder').sort((a,b)=>a.name.localeCompare(b.name,'he'));
   const fi=all.filter(e=>e['.tag']==='file').sort((a,b)=>(b.server_modified||'').localeCompare(a.server_modified||''));
