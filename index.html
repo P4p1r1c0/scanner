@@ -112,7 +112,10 @@ main{max-width:860px;margin:0 auto;padding:8px max(18px,env(safe-area-inset-righ
 
 /* Live camera */
 .cam{background:#000;padding:0}
-.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;touch-action:none}
+.zoomrow{display:flex;gap:6px;background:rgba(0,0,0,.45);border-radius:999px;padding:4px}
+.zoomrow button{border:0;background:none;color:#fff;font-weight:800;font-size:13px;min-width:40px;height:32px;border-radius:999px;font-variant-numeric:tabular-nums}
+.zoomrow button[aria-pressed="true"]{background:var(--mark);color:#1A1A1A}
 #camOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .camtop{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 18px;background:linear-gradient(rgba(0,0,0,.6),transparent)}
 .camtop .sp{flex:1}
@@ -402,11 +405,13 @@ main{padding-bottom:150px}
   <div class="camtop">
     <button class="pill" id="camClose">סגור</button>
     <span class="sp"></span>
+    <button class="pill" id="camLens" hidden>החלף עדשה</button>
     <button class="pill" id="camTorch" hidden aria-pressed="false">פנס</button>
     <button class="pill" id="camFilter" aria-pressed="false">מקור</button>
     <button class="pill" id="camCrop" aria-pressed="true">חיתוך אוטומטי</button>
   </div>
   <div class="cambottom">
+    <div class="zoomrow" id="zoomRow" hidden role="group" aria-label="זום"></div>
     <div class="cammodes" role="group" aria-label="מצב צילום">
       <button data-mode="single">יחיד</button>
       <button data-mode="batch">רצף</button>
@@ -499,7 +504,7 @@ main{padding-bottom:150px}
     <ul class="lib" id="libList"></ul>
     <div class="cleanrow" id="cleanRow"><label class="check"><input type="checkbox" id="cleanChk"> פינוי מקום אוטומטי</label>מסמך שלא נפתח ולא שונה חודשיים נמחק מהטלפון. 10 ימים לפני כן יופיע לידו ״יימחק בעוד…״, כדי שתספיק להוריד אותו.</div>
     <div class="row2" id="libMain"><button type="button" class="btn" id="libClose">סגור</button><button type="button" class="btn primary" id="libNew">מסמך חדש</button></div>
-    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 15 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
+    <p class="hint" id="verLine" style="text-align:center;font-size:13px;margin-top:10px">גרסה 16 · נשמר ב־Dropbox בתיקייה ״תמונות״</p>
     <div class="selbar" id="selBar" hidden>
       <div class="selinfo"><span id="selCount">נבחרו 0</span><button type="button" class="linkbtn" id="selClear">בטל בחירה</button></div>
       <label class="check" style="margin-top:6px"><input type="checkbox" id="selZip"> בהורדה: ZIP אחד</label>
@@ -728,17 +733,51 @@ async function openCam(){
   $('#camScreen').hidden=false;$('#camErr').hidden=true;renderCamUI();camHint('פותח מצלמה…');
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camFail('הדפדפן הזה לא מאפשר מצלמה בתוך האפליקציה.');return;}
   try{
-    cam.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:3840},height:{ideal:2160}}});
+    /* 4:3 like the phone's own camera; 16:9 crops the sensor and looks zoomed in */
+    const want={width:{ideal:4032},height:{ideal:3024},aspectRatio:{ideal:4/3}};
+    const dev=ls.get('scan-lens');
+    try{cam.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:dev?{...want,deviceId:{exact:dev}}:{...want,facingMode:{ideal:'environment'}}});}
+    catch(e1){if(e1&&e1.name==='NotAllowedError')throw e1;ls.del('scan-lens');
+      cam.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...want,facingMode:{ideal:'environment'}}});}
   }catch(e){
     camFail(e&&e.name==='NotAllowedError'?'אין הרשאה למצלמה. אשר גישה למצלמה בהגדרות האתר (סמל המנעול ליד הכתובת), או צלם עם מצלמת הטלפון.':'המצלמה לא נפתחה. אפשר לצלם עם מצלמת הטלפון.');return;}
   if($('#camScreen').hidden){stopStream();return;}
   const v=$('#camVideo');v.srcObject=cam.stream;try{await v.play();}catch(_){}
   cam.track=cam.stream.getVideoTracks()[0];cam.torch=false;
+  setupZoom();setupLens();
   try{const caps=cam.track.getCapabilities?cam.track.getCapabilities():{};$('#camTorch').hidden=!caps.torch;
     if(caps.focusMode&&caps.focusMode.includes('continuous'))cam.track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});}catch(_){}
   try{cam.wake=navigator.wakeLock?await navigator.wakeLock.request('screen'):null;}catch(_){cam.wake=null;}
   cam.quad=null;cam.shown=null;cam.stable=0;cam.armed=true;cam.busy=false;
   cancelAnimationFrame(cam.raf);cam.raf=requestAnimationFrame(loop);renderCamUI();}
+/* zoom: start fully zoomed out, pinch or tap 0.5×/1×/2× */
+function setupZoom(){const row=$('#zoomRow');row.hidden=true;row.innerHTML='';cam.zoom=null;
+  let caps={};try{caps=cam.track.getCapabilities?cam.track.getCapabilities():{};}catch(_){}
+  if(!caps.zoom||!(caps.zoom.max>caps.zoom.min))return;
+  cam.zoomCaps=caps.zoom;setZoom(caps.zoom.min);
+  const stops=[...new Set([caps.zoom.min,1,2,5].filter(z=>z>=caps.zoom.min&&z<=caps.zoom.max).map(z=>Math.round(z*10)/10))].slice(0,4);
+  if(stops.length<2)return;
+  stops.forEach(z=>{const b=document.createElement('button');b.type='button';b.dataset.z=z;b.textContent=(z<1?z.toFixed(1).replace(/^0/,''):z)+'×';row.appendChild(b);});
+  row.hidden=false;markZoom();}
+function markZoom(){document.querySelectorAll('#zoomRow [data-z]').forEach(b=>b.setAttribute('aria-pressed',Math.abs(+b.dataset.z-(cam.zoom||0))<0.05));}
+let zT=0,zPending=null;
+function setZoom(z){const c=cam.zoomCaps;if(!c||!cam.track)return;z=Math.max(c.min,Math.min(c.max,z));cam.zoom=z;markZoom();
+  zPending=z;if(zT)return;zT=setTimeout(()=>{zT=0;const v=zPending;cam.track&&cam.track.applyConstraints({advanced:[{zoom:v}]}).catch(()=>{});},60);}
+$('#zoomRow').addEventListener('click',e=>{const b=e.target.closest('[data-z]');if(b)setZoom(+b.dataset.z);});
+(()=>{const v=$('#camVideo');let d0=0,z0=1;const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  v.addEventListener('touchstart',e=>{if(e.touches.length===2&&cam.zoomCaps){d0=dist(e.touches);z0=cam.zoom||cam.zoomCaps.min;}},{passive:true});
+  v.addEventListener('touchmove',e=>{if(e.touches.length===2&&d0){e.preventDefault();setZoom(z0*dist(e.touches)/d0);}},{passive:false});
+  v.addEventListener('touchend',()=>{d0=0;});})();
+/* lens: some phones expose the wide lens as a separate back camera */
+async function setupLens(){const b=$('#camLens');b.hidden=true;cam.lenses=[];
+  try{const all=await navigator.mediaDevices.enumerateDevices();
+    cam.lenses=all.filter(d=>d.kind==='videoinput'&&d.label&&!/front|user|facing front|קדמי/i.test(d.label));
+    b.hidden=cam.lenses.length<2;}catch(_){}}
+$('#camLens').onclick=()=>{if(!cam.lenses||cam.lenses.length<2||!cam.track)return;
+  const cur=cam.track.getSettings?cam.track.getSettings().deviceId:'';
+  const i=cam.lenses.findIndex(d=>d.deviceId===cur),next=cam.lenses[(i+1)%cam.lenses.length];
+  ls.set('scan-lens',next.deviceId);stopStream();openCam();
+  toast('עדשה '+((i+1)%cam.lenses.length+1)+' מתוך '+cam.lenses.length,1800);};
 function camFail(msg){$('#camErr').hidden=false;$('#camErrText').textContent=msg;camHint('');}
 function stopStream(){cancelAnimationFrame(cam.raf);if(cam.stream)cam.stream.getTracks().forEach(t=>t.stop());cam.stream=null;cam.track=null;
   try{cam.wake&&cam.wake.release();}catch(_){}cam.wake=null;$('#camVideo').srcObject=null;}
